@@ -3,13 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useUserStore } from '../stores/userStore';
 import axios from 'axios';
+import { TempUser } from '../types';
 
-const BASEROW_TOKEN = '0lsB6U6zcpKt8W4f9pydlsvJnibOASeI';
-const TABLE_ID = '396313';
+const BASEROW_TOKEN = import.meta.env.VITE_BASEROW_TOKEN;
+const TABLE_ID = import.meta.env.VITE_BASEROW_TABLE_ID;
+
+if (!BASEROW_TOKEN || !TABLE_ID) {
+  throw new Error('Variáveis de ambiente VITE_BASEROW_TOKEN e VITE_BASEROW_TABLE_ID são obrigatórias');
+}
 
 export function VerifyCode() {
   const navigate = useNavigate();
-  const tempUser = useUserStore(state => state.tempUser);
+  const tempUser = useUserStore(state => state.tempUser) as TempUser;
   const setUser = useUserStore(state => state.setUser);
   
   const [code, setCode] = useState(['', '', '', '']);
@@ -57,6 +62,12 @@ export function VerifyCode() {
       return;
     }
 
+    if (!tempUser.verificationCode) {
+      toast.error('Código de verificação não encontrado');
+      navigate('/register');
+      return;
+    }
+
     if (enteredCode === tempUser.verificationCode) {
       try {
         // Se tiver nome, é registro. Se não tiver, é login
@@ -75,6 +86,10 @@ export function VerifyCode() {
               }
             }
           );
+
+          if (!tempUser.whatsapp) {
+            throw new Error('WhatsApp não encontrado nos dados temporários');
+          }
 
           // Salvar usuário no estado global
           setUser({

@@ -1,0 +1,2 @@
+// Avatar padrão em base64 (ícone de usuário simples em azul)
+export const DEFAULT_AVATAR = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+CiAgPGNpcmNsZSBjeD0iNTAiIGN5PSIzNSIgcj0iMjAiIGZpbGw9IiMzQjgyRjYiLz4KICA8cGF0aCBkPSJNODUgOTBjMC0xOS4zMy0xNS42Ny0zNS0zNS0zNVMxNSA3MC42NyAxNSA5MGg3MHoiIGZpbGw9IiMzQjgyRjYiLz4KPC9zdmc+Cg==';

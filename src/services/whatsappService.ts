@@ -19,10 +19,9 @@ export const whatsappService = {
 
   async sendVerificationCode(phoneNumber: string, code: string): Promise<boolean> {
     try {
-      // Formatar o número do WhatsApp (remover caracteres especiais)
+      // O número já deve vir formatado como "5541999999999" do componente WhatsAppInput
+      // Apenas garantir que não há caracteres especiais
       const formattedNumber = phoneNumber.replace(/\D/g, '');
-      
-      console.log('Enviando código para:', formattedNumber);
 
       const response = await api.post(`/message/sendText/${INSTANCE}`, {
         number: formattedNumber,
@@ -36,9 +35,12 @@ export const whatsappService = {
         }
       });
 
-      console.log('Resposta da API:', response.data);
+      // Verificar se a resposta foi bem sucedida
+      if (response.data && response.data.error) {
+        console.error('Erro na resposta da API:', response.data.error);
+        return false;
+      }
 
-      // A API retorna sucesso mesmo sem o status 200
       return true;
     } catch (error) {
       console.error('Erro ao enviar código:', error);

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { User } from '../types';
+import { User, TempUser } from '../types';
 import axios from 'axios';
 
 interface BaserowUpdates {
@@ -12,8 +12,8 @@ interface BaserowUpdates {
 interface UserState {
   user: User | null;
   isAuthenticated: boolean;
-  tempUser: Partial<User> | null;
-  setTempUser: (user: Partial<User> | null) => void;
+  tempUser: TempUser | null;
+  setTempUser: (user: TempUser | null) => void;
   setUser: (user: User | null) => void;
   updateUser: (updates: Partial<User>) => Promise<void>;
   logout: () => void;
