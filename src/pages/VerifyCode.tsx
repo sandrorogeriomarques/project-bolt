@@ -59,39 +59,71 @@ export function VerifyCode() {
 
     if (enteredCode === tempUser.verificationCode) {
       try {
-        // Criar usuário no Baserow
-        const response = await axios.post(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`, 
-          {
-            "field_3016949": tempUser.name, // Nome
-            "field_3016950": "/uploads/avatars/default-avatar.png", // Avatar padrão
-            "field_3016951": tempUser.whatsapp // WhatsApp
-          },
-          {
-            headers: {
-              'Authorization': `Token ${BASEROW_TOKEN}`,
-              'Content-Type': 'application/json'
+        // Se tiver nome, é registro. Se não tiver, é login
+        if (tempUser.name) {
+          // Criar usuário no Baserow
+          const response = await axios.post(
+            `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`,
+            {
+              "field_3016949": tempUser.name,
+              "field_3016951": tempUser.whatsapp
+            },
+            {
+              headers: {
+                'Authorization': `Token ${BASEROW_TOKEN}`,
+                'Content-Type': 'application/json'
+              }
             }
+          );
+
+          // Salvar usuário no estado global
+          setUser({
+            id: response.data.id.toString(),
+            name: tempUser.name,
+            whatsapp: tempUser.whatsapp
+          });
+
+          toast.success('Cadastro realizado com sucesso!');
+        } else {
+          // Buscar usuário existente no Baserow
+          const response = await axios.get(
+            `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`,
+            {
+              headers: {
+                'Authorization': `Token ${BASEROW_TOKEN}`,
+              },
+              params: {
+                'search': tempUser.whatsapp,
+                'user_field_names': true
+              }
+            }
+          );
+
+          const user = response.data.results.find((u: any) => u.WhatsApp === tempUser.whatsapp);
+          
+          if (user) {
+            // Salvar usuário no estado global
+            setUser({
+              id: user.id.toString(),
+              name: user.Nome,
+              whatsapp: user.WhatsApp
+            });
+
+            toast.success('Login realizado com sucesso!');
+          } else {
+            toast.error('Usuário não encontrado');
+            navigate('/login');
+            return;
           }
-        );
+        }
 
-        console.log('Resposta do Baserow:', response.data);
-
-        // Salvar usuário no estado global
-        setUser({
-          id: response.data.id.toString(),
-          name: tempUser.name,
-          whatsapp: tempUser.whatsapp,
-          avatar: response.data.Avatar || '/uploads/avatars/default-avatar.png'
-        });
-
-        toast.success('Cadastro realizado com sucesso!');
         navigate('/dashboard');
       } catch (error) {
-        console.error('Erro ao salvar usuário:', error);
+        console.error('Erro ao processar operação:', error);
         if (axios.isAxiosError(error)) {
           console.error('Detalhes do erro:', error.response?.data);
         }
-        toast.error('Erro ao finalizar cadastro');
+        toast.error(tempUser.name ? 'Erro ao finalizar cadastro' : 'Erro ao fazer login');
       }
     } else {
       toast.error('Código inválido');

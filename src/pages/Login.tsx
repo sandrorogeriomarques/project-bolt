@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import axios from 'axios';
+import { whatsappService } from '../services/whatsappService';
 import { useUserStore } from '../stores/userStore';
+import { WhatsAppInput } from '../components/WhatsAppInput';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 const BASEROW_TOKEN = '0lsB6U6zcpKt8W4f9pydlsvJnibOASeI';
 const TABLE_ID = '396313';
@@ -11,6 +13,7 @@ const TABLE_ID = '396313';
 export function Login() {
   const navigate = useNavigate();
   const setUser = useUserStore(state => state.setUser);
+  const setTempUser = useUserStore(state => state.setTempUser);
   const [loading, setLoading] = useState(false);
   const [whatsapp, setWhatsapp] = useState('');
 
@@ -36,70 +39,78 @@ export function Login() {
       const user = users.find((u: any) => u.WhatsApp === whatsapp);
 
       if (user) {
-        setUser({
-          id: user.id.toString(),
-          name: user.Nome,
-          whatsapp: user.WhatsApp,
-          avatar: user.Avatar
-        });
-        
-        toast.success('Login realizado com sucesso!');
-        navigate('/dashboard', { replace: true });
+        // Gerar código de verificação
+        const verificationCode = whatsappService.generateVerificationCode();
+        console.log('Código gerado:', verificationCode);
+
+        // Enviar código por WhatsApp
+        const sent = await whatsappService.sendVerificationCode(
+          whatsapp,
+          verificationCode
+        );
+
+        if (sent) {
+          // Salvar dados temporários
+          setTempUser({
+            whatsapp,
+            verificationCode
+          });
+
+          // Redirecionar para página de verificação
+          console.log('Redirecionando para verificação...');
+          navigate('/verify-code');
+        } else {
+          toast.error('Erro ao enviar código de verificação');
+        }
       } else {
         toast.error('Usuário não encontrado');
       }
     } catch (error) {
-      console.error('Erro ao fazer login:', error);
-      toast.error('Erro ao fazer login');
+      console.error('Erro no login:', error);
+      toast.error('Erro ao processar login');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Entrar na sua conta
-          </h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            Entrar
+          </h1>
+          <p className="mt-2 text-gray-600">
+            Digite seu WhatsApp para receber o código de acesso
+          </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="whatsapp" className="sr-only">
-                WhatsApp
-              </label>
-              <input
-                id="whatsapp"
-                name="whatsapp"
-                type="tel"
-                required
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="WhatsApp"
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-              />
-            </div>
-          </div>
 
+        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow-lg space-y-6">
           <div>
-            <button
-              type="submit"
+            <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700 mb-1">
+              WhatsApp
+            </label>
+            <WhatsAppInput
+              value={whatsapp}
+              onChange={setWhatsapp}
               disabled={loading}
-              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
-                loading ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            >
-              {loading ? 'Entrando...' : 'Entrar'}
-            </button>
+            />
           </div>
 
-          <div className="text-center mt-4">
-            <Link to="/register" className="text-indigo-600 hover:text-indigo-500">
-              Não tem uma conta? Cadastre-se
+          <button
+            type="submit"
+            disabled={loading || !whatsapp}
+            className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Processando...' : 'Continuar'}
+          </button>
+
+          <p className="text-center text-sm text-gray-600">
+            Não tem uma conta?{' '}
+            <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+              Registre-se
             </Link>
-          </div>
+          </p>
         </form>
       </div>
     </div>
