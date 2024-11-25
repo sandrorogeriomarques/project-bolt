@@ -1,5 +1,9 @@
 const VISION_API_URL = 'https://vision.googleapis.com/v1/images:annotate';
-const API_KEY = 'AIzaSyCCmkCioKP8s0vDqEp9T6tfa-kEPqJm_gw';
+const API_KEY = import.meta.env.VITE_GOOGLE_VISION_API_KEY;
+
+if (!API_KEY) {
+  throw new Error('Google Vision API Key não encontrada. Por favor, configure a variável de ambiente VITE_GOOGLE_VISION_API_KEY');
+}
 
 export async function analyzeImage(imageFile: File): Promise<string> {
   // Convert image to base64
