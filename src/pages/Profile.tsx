@@ -1,6 +1,7 @@
 import React from 'react';
 import { User } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
+import { getAvatarUrl } from '../utils/getAvatarUrl';
 
 export function Profile() {
   const user = useUserStore((state) => state.user);
@@ -15,7 +16,7 @@ export function Profile() {
         <div className="text-center mb-8">
           {user.avatar ? (
             <img
-              src={user.avatar.startsWith('http') ? user.avatar : `http://localhost:3001/${user.avatar.replace(/^\/+/, '')}`}
+              src={getAvatarUrl(user.avatar)}
               alt="Avatar"
               className="w-32 h-32 rounded-full mx-auto object-cover"
             />

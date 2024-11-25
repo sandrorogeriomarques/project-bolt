@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, Package, Home, User, Settings, LogOut, MapPin } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
+import { getAvatarUrl } from '../utils/getAvatarUrl';
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
@@ -61,7 +62,7 @@ export function Navigation() {
               {user?.avatar ? (
                 <img
                   className="h-8 w-8 rounded-full object-cover"
-                  src={user.avatar.startsWith('http') ? user.avatar : `http://localhost:3001/${user.avatar.replace(/^\/+/, '')}`}
+                  src={getAvatarUrl(user.avatar)}
                   alt={user.name}
                 />
               ) : (
@@ -132,7 +133,7 @@ export function Navigation() {
                 {user?.avatar ? (
                   <img
                     className="h-8 w-8 rounded-full object-cover"
-                    src={user.avatar.startsWith('http') ? user.avatar : `http://localhost:3001/${user.avatar.replace(/^\/+/, '')}`}
+                    src={getAvatarUrl(user.avatar)}
                     alt={user.name}
                   />
                 ) : (

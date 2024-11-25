@@ -102,11 +102,12 @@ export function VerifyCode() {
           const user = response.data.results.find((u: any) => u.WhatsApp === tempUser.whatsapp);
           
           if (user) {
-            // Salvar usuário no estado global
+            // Salvar usuário no estado global com o avatar
             setUser({
               id: user.id.toString(),
               name: user.Nome,
-              whatsapp: user.WhatsApp
+              whatsapp: user.WhatsApp,
+              avatar: user.Avatar
             });
 
             toast.success('Login realizado com sucesso!');

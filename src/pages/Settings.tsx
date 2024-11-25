@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import { Camera } from 'lucide-react';
 import { uploadImage } from '../services/upload';
 import axios from 'axios'; // Import axios
+import { getAvatarUrl } from '../utils/getAvatarUrl';
 
 export function Settings() {
   const { user, updateUser } = useUserStore();
@@ -100,13 +101,6 @@ export function Settings() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const getAvatarUrl = (path?: string) => {
-    if (!path) return '/uploads/avatars/default-avatar.png';
-    if (path.startsWith('data:')) return path;
-    if (path.startsWith('http')) return path;
-    return `http://localhost:3001/${path.replace(/^\/+/, '')}`;
   };
 
   return (
