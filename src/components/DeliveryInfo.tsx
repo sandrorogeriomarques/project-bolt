@@ -14,10 +14,10 @@ export function DeliveryInfo({ data }: DeliveryInfoProps) {
   };
 
   const formatCurrency = (value: number) => {
-    return value.toLocaleString('pt-BR', {
+    return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
-    });
+    }).format(value);
   };
 
   return (
@@ -27,7 +27,7 @@ export function DeliveryInfo({ data }: DeliveryInfoProps) {
         <section>
           <div className="flex items-center gap-2 mb-4">
             <MapPin className="w-6 h-6 text-blue-600" />
-            <h2 className="text-xl font-semibold">Informações de Entrega</h2>
+            <h2 className="text-xl font-semibold">Informações do Cliente</h2>
           </div>
           
           <div className="space-y-2">

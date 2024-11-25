@@ -4,7 +4,7 @@ import { ImagePreview } from '../components/ImagePreview';
 import { DeliveryInfo } from '../components/DeliveryInfo';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { parseDeliveryData } from '../utils/parseDeliveryData';
-import { analyzeImage } from '../services/visionApi';
+import { analyzeImageWithFallback } from '../services/ocrService';
 import type { DeliveryData } from '../types';
 import { useUserStore } from '../stores/userStore';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,8 @@ export function Deliveries() {
   const [deliveries, setDeliveries] = useState<DeliveryData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentService, setCurrentService] = useState<string>('OCR.space');
+  const [deliveryData, setDeliveryData] = useState<DeliveryData | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -23,67 +25,83 @@ export function Deliveries() {
   }, [user, navigate]);
 
   const processImage = async (file: File) => {
-    if (!user) {
-      setError('Usuário não autenticado');
-      navigate('/login');
-      return;
-    }
-
     try {
       setIsLoading(true);
-      setError(null);
-      
-      const objectUrl = URL.createObjectURL(file);
-      const text = await analyzeImage(file);
-      
-      // Log detalhado do texto OCR
-      console.log('=== OCR Text Raw ===');
-      console.log(text);
-      console.log('=== OCR Text Lines ===');
-      text.split('\n').forEach((line, i) => {
-        console.log(`Line ${i + 1}:`, line);
-      });
-      
-      const parsedData = parseDeliveryData(text);
-      console.log('Parsed Data:', parsedData); // Debug log
-      
-      if (!parsedData) {
-        throw new Error('Não foi possível extrair as informações de entrega da imagem');
+      setError('');
+
+      // Validar o arquivo
+      if (!file) {
+        throw new Error('Nenhum arquivo selecionado');
       }
 
+      if (!file.type.startsWith('image/')) {
+        throw new Error('O arquivo deve ser uma imagem');
+      }
+
+      const MAX_SIZE = 1024 * 1024; // 1MB
+      if (file.size > MAX_SIZE) {
+        throw new Error('A imagem deve ter no máximo 1MB');
+      }
+
+      console.log('Processando imagem:', file.name);
+      console.log('Tipo:', file.type);
+      console.log('Tamanho:', (file.size / 1024).toFixed(2) + 'KB');
+
+      const result = await analyzeImageWithFallback(file);
+      console.log('Resultado do OCR:', result);
+
+      if (!result.data) {
+        throw new Error('Não foi possível extrair os dados da imagem');
+      }
+
+      console.log('Dados extraídos:', result.data);
+
+      // Criar nova entrega usando o ID do pedido
       const newDelivery: DeliveryData = {
-        id: parsedData.id || `delivery-${Date.now()}`,
-        imageUrl: objectUrl,
+        id: result.data.data?.id || '',  
+        imageUrl: URL.createObjectURL(file),
         timestamp: Date.now(),
-        customerName: parsedData.customerName,
-        street: parsedData.street,
-        number: parsedData.number,
-        neighborhood: parsedData.neighborhood,
-        city: parsedData.city,
-        complement: parsedData.complement,
-        orderNumber: parsedData.orderNumber,
-        orderDate: parsedData.orderDate,
-        totalAmount: parsedData.totalAmount,
-        store: parsedData.store,
+        customerName: result.data.data?.customerName || '',
+        street: result.data.data?.street || '',
+        number: result.data.data?.number || '',
+        neighborhood: result.data.data?.neighborhood || '',
+        city: result.data.data?.city || '',
+        complement: result.data.data?.complement || '',
+        orderNumber: result.data.data?.orderNumber || '',
+        orderDate: result.data.data?.orderDate || '',
+        totalAmount: result.data.data?.totalAmount,
+        store: result.data.data?.store || '',
         deliveryPerson: {
-          id: user.id,
-          name: user.name
+          id: '25',
+          name: 'Meu claro Principal'
         }
       };
 
-      console.log('New Delivery:', newDelivery); // Debug log
+      console.log('Nova entrega antes da validação:', newDelivery);
 
+      // Validar ID
+      if (!newDelivery.id) {
+        console.error('ID não encontrado. Dados completos:', {
+          resultData: result.data,
+          newDelivery
+        });
+        throw new Error('ID do pedido não encontrado na imagem');
+      }
+
+      console.log('Nova entrega:', newDelivery);
       setDeliveries(prev => [...prev, newDelivery]);
+      setError('');
     } catch (error) {
       console.error('Erro ao processar imagem:', error);
-      setError(error instanceof Error ? error.message : 'Falha ao processar imagem');
+      setError(error.message || 'Erro ao processar imagem');
+      setDeliveryData(null);
     } finally {
       setIsLoading(false);
     }
   };
 
   if (!user) {
-    return null; // ou um componente de loading/redirecionamento
+    return null;
   }
 
   return (
@@ -104,12 +122,25 @@ export function Deliveries() {
         />
       )}
 
+      {isLoading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center justify-center mb-4">
+              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            </div>
+            <p className="text-center text-gray-600">
+              Processando imagem com {currentService}...
+            </p>
+          </div>
+        </div>
+      )}
+
       {deliveries.length > 0 && (
         <div className="space-y-6">
           {deliveries.map((delivery, index) => (
             <div key={`${delivery.id}-${delivery.timestamp}`} className="bg-white rounded-lg shadow-lg p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-900">
-                Entrega #{deliveries.length - index}
+                Entrega #{index + 1}
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <ImagePreview imageUrl={delivery.imageUrl} />
@@ -150,15 +181,6 @@ export function Deliveries() {
           </label>
         </div>
       </div>
-
-      {isLoading && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-4 flex items-center gap-2">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-            <span>Processando imagem...</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
