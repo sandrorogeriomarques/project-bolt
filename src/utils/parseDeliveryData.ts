@@ -63,95 +63,170 @@ const findId = (text: string): string | null => {
 // Melhorada extração de endereço e número
 const findAddressAndNumber = (text: string): { street: string | null; number: string | null } => {
   const lines = text.split('\n');
-  let addressLine = '';
-  let number = null;
-
-  // Debug: Imprime todas as linhas
   console.log('=== Linhas do texto ===');
-  lines.forEach((line, i) => console.log(`Linha ${i}: "${line.trim()}"`));
+  lines.forEach((line, index) => {
+    console.log(`Linha ${index}: "${line}"`);
+  });
 
-  // Primeiro procura por endereço completo com número
+  // Procura a linha que contém o endereço
+  let addressLine = '';
+  let nextLine = '';
+  let addressIndex = -1;
+
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    const nextLine = i < lines.length - 1 ? lines[i + 1].trim() : '';
-    
-    if (line.match(/Endereco\s*:/i) || line.match(/Rua\s*:/i)) {
-      console.log('=== Linha do endereço encontrada ===');
-      console.log('Original:', line);
-      
-      // Extrai a parte do endereço após "Endereco:" ou "Rua:"
-      const addressMatch = line.match(/(?:Endereco|Rua)\s*:\s*(.+)$/i);
-      if (addressMatch) {
-        addressLine = addressMatch[1].trim();
-      }
-      
-      console.log('Após extrair endereço:', addressLine);
-      
-      // Se encontrou R. Bpo, normaliza para "rua bispo"
-      if (addressLine.match(/\b(r\.|rua)\s+bpo\b/i)) {
-        addressLine = addressLine.replace(/\b(r\.|rua)\s+bpo\b/i, 'rua bispo');
-      }
-      
-      console.log('Após normalizar rua:', addressLine);
-      
-      // Procura número na mesma linha
-      const numberInLine = addressLine.match(/,\s*(\d+)/);
-      if (numberInLine) {
-        number = numberInLine[1];
-        addressLine = addressLine.replace(/,\s*\d+.*$/, '').trim();
-      }
-      
-      // Procura número na próxima linha
-      else if (nextLine.match(/^\d+$/)) {
-        number = nextLine;
-      }
-      
-      // Procura número em linha separada após vírgula
-      else if (nextLine.match(/^[^,]+,\s*(\d+)/)) {
-        const numberMatch = nextLine.match(/^[^,]+,\s*(\d+)/);
-        if (numberMatch) {
-          number = numberMatch[1];
-          addressLine = `${addressLine} ${nextLine.replace(/,\s*\d+.*$/, '')}`;
-        }
-      }
-      
+    if (lines[i].match(/(?:^|\t)(?:Endereco|endereço|end\.?):/i)) {
+      addressLine = lines[i];
+      nextLine = lines[i + 1] || '';
+      addressIndex = i;
       break;
     }
   }
 
-  // Normaliza o endereço final
-  if (addressLine) {
-    addressLine = addressLine
-      .toLowerCase()
-      .replace(/\s+/g, ' ')  // Remove espaços extras
-      .replace(/,\s*$/, '')  // Remove vírgula no final
+  if (!addressLine) {
+    throw new Error('Endereço não encontrado no texto');
+  }
+
+  console.log('=== Linha do endereço encontrada ===');
+  console.log('Original:', addressLine);
+  console.log('Próxima linha:', nextLine);
+
+  // Função para limpar e normalizar o endereço
+  function extractAddressFromLine(line: string): string {
+    // Se a linha contém "Endereco:", extrai apenas a parte após isso
+    if (line.includes('Endereco:')) {
+      const parts = line.split('Endereco:');
+      return parts[parts.length - 1].trim();
+    }
+    return line.trim();
+  }
+
+  function cleanAddressLine(address: string): string {
+    return address
+      // Remove prefixos comuns
+      .replace(/(?:^|\t)(?:Endereco|endereço|end\.?):/i, '')
+      // Remove "Bairro:" e variações no início ou meio do texto
+      .replace(/(?:^|\s)(?:bairro|balrro|bai?r+o)\s*:\s*[^,\t]+(?:\t|\s*,\s*)/i, '')
+      // Remove vírgulas extras
+      .replace(/,+/g, ',')
+      // Remove espaços extras
       .trim();
   }
 
+  // Extrai apenas a parte do endereço da linha
+  let fullAddress = extractAddressFromLine(addressLine);
+  
+  // Limpa o endereço de textos extras
+  fullAddress = cleanAddressLine(fullAddress);
+  
+  // Sempre verifica a próxima linha para números
+  if (nextLine) {
+    const cleanNextLine = cleanAddressLine(nextLine);
+    // Se a próxima linha contém apenas números ou é um número seguido de Bairro/Comp
+    if (cleanNextLine.match(/^\d+\s*(?:$|Bairro:|Comp:)/i)) {
+      fullAddress += ', ' + cleanNextLine.split(/\s+(?:Bairro:|Comp:)/)[0].trim();
+    }
+    // Se o endereço atual não tem vírgula ou número, e a próxima linha não começa com palavras-chave
+    else if (!fullAddress.includes(',') && !fullAddress.match(/\d+/) && !cleanNextLine.match(/^(?:Bairro|Comp|CEP|Ref|Cidade):/i)) {
+      fullAddress += ' ' + cleanNextLine.split(/\t|Bairro:/)[0].trim();
+    }
+  }
+
+  console.log('Após extrair endereço:', fullAddress);
+
+  // Normaliza abreviações comuns
+  fullAddress = normalizeAddressAbbreviations(fullAddress);
+  console.log('Após normalizar abreviações:', fullAddress);
+
+  // Extrai número e nome da rua
+  let street = '';
+  let number = '';
+
+  // Primeiro tenta encontrar o número após uma vírgula
+  const commaNumberMatch = fullAddress.match(/,\s*(\d+)/);
+  if (commaNumberMatch) {
+    number = commaNumberMatch[1];
+    street = fullAddress.substring(0, commaNumberMatch.index).trim();
+  } else {
+    // Se não encontrou após vírgula, procura por número no final ou após espaço
+    const numberMatch = fullAddress.match(/[,\s](\d+)(?:\s*(?:Bairro|Comp|$))/i);
+    if (numberMatch) {
+      number = numberMatch[1];
+      street = fullAddress.substring(0, numberMatch.index).trim();
+    } else {
+      // Último recurso: procura por qualquer número
+      const anyNumberMatch = fullAddress.match(/(\d+)/);
+      if (anyNumberMatch) {
+        number = anyNumberMatch[1];
+        const parts = fullAddress.split(number);
+        street = parts[0].replace(/,\s*$/, '').trim();
+      } else {
+        street = fullAddress.replace(/,\s*$/, '').trim();
+      }
+    }
+  }
+
+  // Limpa novamente o nome da rua de possíveis textos extras
+  street = street
+    .replace(/(?:^|\s)(?:bairro|balrro|bai?r+o)\s*:\s*[^,\t]+(?:\t|\s*,\s*)/gi, '')
+    .replace(/^\s*,\s*/, '')
+    .trim();
+
   console.log('=== Resultado final ===');
-  console.log('Rua:', addressLine);
+  console.log('Rua:', street.toLowerCase());
   console.log('Número:', number);
 
   return {
-    street: addressLine || null,
-    number: number
+    street: street.toLowerCase(),
+    number
   };
 };
+
+// Função para normalizar abreviações de endereço
+function normalizeAddressAbbreviations(address: string): string {
+  const abbreviations: { [key: string]: string } = {
+    'r\\.': 'rua',
+    'av\\.': 'avenida',
+    'al\\.': 'alameda',
+    'bpo': 'bispo',
+    'visc\\.': 'visconde',
+    'gen\\.': 'general',
+    'mal\\.': 'marechal'
+  };
+
+  // Aplica todas as normalizações de abreviações
+  for (const [abbr, full] of Object.entries(abbreviations)) {
+    const regex = new RegExp(`\\b${abbr}\\b`, 'i');
+    address = address.replace(regex, full);
+  }
+
+  return address;
+}
 
 // Melhorada detecção de bairro
 const findNeighborhood = (text: string): string | null => {
   const patterns = [
-    /(?:^|\n|\t)Bairro\s*:\s*([^,\n\t]+?)(?:\s+(?:Comp|Endereco|CEP):|$)/i,
-    /Bairro\s*:\s*([^,\n]+)/i
+    // Padrão para "bairro" com possíveis erros de OCR
+    /(?:^|\n|\t)(?:bairro|balrro|bai?r+o)\s*:\s*([^,\n\t]+?)(?:\s+(?:Comp|Endereco|CEP|Ref):|$)/i,
+    // Padrão mais simples como fallback
+    /(?:bairro|balrro|bai?r+o)\s*:\s*([^,\n]+)/i
   ];
+
+  console.log('=== Procurando bairro ===');
+  const lines = text.split('\n');
+  for (const line of lines) {
+    console.log(`Verificando linha: "${line.trim()}"`);
+  }
 
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match) {
-      return match[1].trim().toLowerCase();
+      const neighborhood = match[1].trim().toLowerCase();
+      console.log(`Bairro encontrado: "${neighborhood}" usando pattern: ${pattern}`);
+      return neighborhood;
     }
   }
 
+  console.log('Nenhum bairro encontrado');
   return null;
 };
 
@@ -185,7 +260,7 @@ export function parseOcrSpaceData(text: string): ParseResult {
     }
 
     // Extrair endereço e número
-    const { street, number } = findAddressAndNumber(text);
+    let { street, number } = findAddressAndNumber(text);
     console.log('Endereço encontrado:', street, 'Número encontrado:', number);
 
     // Extrair complemento

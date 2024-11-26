@@ -1,12 +1,31 @@
 const VISION_API_URL = 'https://vision.googleapis.com/v1/images:annotate';
-const API_KEY = import.meta.env.VITE_GOOGLE_VISION_API_KEY;
+const getApiKey = () => import.meta.env.VITE_GOOGLE_VISION_API_KEY;
 
-if (!API_KEY) {
-  throw new Error('Google Vision API Key não encontrada. Por favor, configure a variável de ambiente VITE_GOOGLE_VISION_API_KEY');
+interface VisionResult {
+  text: string;
+  confidence?: number;
+}
+
+export async function analyzeImageWithVision(file: File): Promise<VisionResult> {
+  try {
+    const text = await analyzeImage(file);
+    return {
+      text,
+      confidence: 0.9 // Google Vision não fornece confiança por texto, usando valor padrão alto
+    };
+  } catch (error) {
+    console.error('Erro no Google Vision:', error);
+    throw new Error(`Erro ao processar imagem com Google Vision: ${error.message}`);
+  }
 }
 
 export async function analyzeImage(imageFile: File): Promise<string> {
   try {
+    const API_KEY = getApiKey();
+    if (!API_KEY) {
+      throw new Error('Google Vision API Key não encontrada. Por favor, configure a variável de ambiente VITE_GOOGLE_VISION_API_KEY');
+    }
+
     // Validar o arquivo
     if (!imageFile) {
       throw new Error('Nenhum arquivo fornecido');
