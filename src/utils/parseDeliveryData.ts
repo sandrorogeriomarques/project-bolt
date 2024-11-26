@@ -1,4 +1,5 @@
 import { DeliveryData } from '../types';
+import { AddressParser } from './addressParser';
 
 interface ParseResult {
   success: boolean;
@@ -30,6 +31,130 @@ function checkRequiredFields(data: Partial<DeliveryData>): string[] {
   return missingFields;
 }
 
+// Melhorada detecção de ID para incluir mais formatos
+const findId = (text: string): string | null => {
+  const patterns = [
+    // ID após telefone
+    /Telefone:.*?ID:?\s*[^\S\r\n]*[\r\n]+\s*(\d+)/i,
+    // ID antes do telefone
+    /^(\d{8})(?:\s*Telefone:)/m,
+    // ID em linha isolada
+    /^[^\S\r\n]*(\d{8})[^\S\r\n]*$/m,
+    // ID no formato localizador
+    /LOCALIZADOR[^:]*:\s*(\d+\s*\d+)/i,
+    // ID após telefone na mesma linha
+    /Telefone:.*?ID:?\s*(\d+)/i,
+    // ID em qualquer lugar após telefone
+    /Telefone:.*[\r\n]+(?:.*[\r\n]+)*?\s*(\d{8})\s*[\r\n]/is
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const id = match[1].replace(/\s+/g, '');
+      if (id.length >= 6) {
+        return id;
+      }
+    }
+  }
+  return null;
+}
+
+// Melhorada extração de endereço e número
+const findAddressAndNumber = (text: string): { street: string | null; number: string | null } => {
+  const lines = text.split('\n');
+  let addressLine = '';
+  let number = null;
+
+  // Debug: Imprime todas as linhas
+  console.log('=== Linhas do texto ===');
+  lines.forEach((line, i) => console.log(`Linha ${i}: "${line.trim()}"`));
+
+  // Primeiro procura por endereço completo com número
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const nextLine = i < lines.length - 1 ? lines[i + 1].trim() : '';
+    
+    if (line.match(/Endereco\s*:/i) || line.match(/Rua\s*:/i)) {
+      console.log('=== Linha do endereço encontrada ===');
+      console.log('Original:', line);
+      
+      // Extrai a parte do endereço após "Endereco:" ou "Rua:"
+      const addressMatch = line.match(/(?:Endereco|Rua)\s*:\s*(.+)$/i);
+      if (addressMatch) {
+        addressLine = addressMatch[1].trim();
+      }
+      
+      console.log('Após extrair endereço:', addressLine);
+      
+      // Se encontrou R. Bpo, normaliza para "rua bispo"
+      if (addressLine.match(/\b(r\.|rua)\s+bpo\b/i)) {
+        addressLine = addressLine.replace(/\b(r\.|rua)\s+bpo\b/i, 'rua bispo');
+      }
+      
+      console.log('Após normalizar rua:', addressLine);
+      
+      // Procura número na mesma linha
+      const numberInLine = addressLine.match(/,\s*(\d+)/);
+      if (numberInLine) {
+        number = numberInLine[1];
+        addressLine = addressLine.replace(/,\s*\d+.*$/, '').trim();
+      }
+      
+      // Procura número na próxima linha
+      else if (nextLine.match(/^\d+$/)) {
+        number = nextLine;
+      }
+      
+      // Procura número em linha separada após vírgula
+      else if (nextLine.match(/^[^,]+,\s*(\d+)/)) {
+        const numberMatch = nextLine.match(/^[^,]+,\s*(\d+)/);
+        if (numberMatch) {
+          number = numberMatch[1];
+          addressLine = `${addressLine} ${nextLine.replace(/,\s*\d+.*$/, '')}`;
+        }
+      }
+      
+      break;
+    }
+  }
+
+  // Normaliza o endereço final
+  if (addressLine) {
+    addressLine = addressLine
+      .toLowerCase()
+      .replace(/\s+/g, ' ')  // Remove espaços extras
+      .replace(/,\s*$/, '')  // Remove vírgula no final
+      .trim();
+  }
+
+  console.log('=== Resultado final ===');
+  console.log('Rua:', addressLine);
+  console.log('Número:', number);
+
+  return {
+    street: addressLine || null,
+    number: number
+  };
+};
+
+// Melhorada detecção de bairro
+const findNeighborhood = (text: string): string | null => {
+  const patterns = [
+    /(?:^|\n|\t)Bairro\s*:\s*([^,\n\t]+?)(?:\s+(?:Comp|Endereco|CEP):|$)/i,
+    /Bairro\s*:\s*([^,\n]+)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[1].trim().toLowerCase();
+    }
+  }
+
+  return null;
+};
+
 // Parser específico para OCR.space
 export function parseOcrSpaceData(text: string): ParseResult {
   try {
@@ -37,46 +162,8 @@ export function parseOcrSpaceData(text: string): ParseResult {
     console.log('Texto recebido:', text);
     
     // Extrair ID
-    let id = '';
-    const idPatterns = [
-      // ID após telefone (em nova linha)
-      /Telefone:.*?ID:?\s*[^\S\r\n]*[\r\n]+\s*(\d+)/i,
-      // ID antes do telefone (em linha isolada)
-      /^(\d{8})(?:\s*Telefone:)/m,
-      // ID em linha isolada (entre Nome e Telefone)
-      /Nome:.*[\r\n]+\s*(\d{8})\s*[\r\n]+\s*Telefone:/is,
-      // ID em linha isolada (após telefone)
-      /^\s*(\d{6,})\s*$/m,
-      // ID após telefone (mesma linha)
-      /Telefone:.*?ID:?\s*[^\d]*(\d+)/i,
-      // ID do localizador do pedido
-      /LOCALIZADOR[^:]*:?\s*(\d+\s*\d+)/i,
-      // Código de coleta
-      /CODIGO\s+DE\s+COLETA[^:]*:?\s*(\d+)/i,
-      // ID após PEDIDO (apenas se tiver 6+ dígitos)
-      /PEDIDO[^:]*:?\s*#?(\d{6,})/i,
-      // Outros formatos de ID (apenas se tiver 6+ dígitos)
-      /ID:?\s*(\d{6,})/i,
-      /ENTREGA[^:]*:?\s*(\d{6,})/i,
-      /NOTA[^:]*:?\s*(\d{6,})/i,
-      /N[º°]?\s*(?:PEDIDO|NOTA)[^:]*:?\s*(\d{6,})/i
-    ];
-
-    for (const pattern of idPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        // Remove espaços e caracteres especiais do ID
-        id = match[1].replace(/[\s\-\.]+/g, '');
-        // Verifica se o ID tem pelo menos 6 dígitos
-        if (id.length >= 6) {
-          console.log('ID encontrado:', id, 'usando pattern:', pattern);
-          break;
-        } else {
-          console.log('ID ignorado por ser muito curto:', id);
-          id = '';
-        }
-      }
-    }
+    const id = findId(text);
+    console.log('ID encontrado:', id);
 
     // Extrair nome do cliente
     let customerName = '';
@@ -97,48 +184,17 @@ export function parseOcrSpaceData(text: string): ParseResult {
       }
     }
 
-    // Extrair endereço
-    let street = '';
-    let number = '';
-    let complement = '';
-
-    // Primeiro tenta encontrar a linha do endereço
-    const addressLine = text.match(/Endereco:?\s*([^\n]+)(?:\n|$)/i);
-    if (addressLine) {
-      const addressText = addressLine[1].trim();
-      console.log('Linha do endereço encontrada:', addressText);
-
-      // Procura por número na próxima linha ou no mesmo texto
-      const numberInNextLine = text.substring(text.indexOf(addressText) + addressText.length).match(/^\s*[\n\r]+\s*(\d+)/);
-      const numberInSameLine = addressText.match(/,\s*(\d+)\s*$/);
-      
-      if (numberInNextLine) {
-        // Se encontrou número na próxima linha
-        number = numberInNextLine[1];
-        street = addressText.replace(/,\s*$/, ''); // Remove vírgula no final
-        console.log('Número encontrado na próxima linha:', number);
-      } else if (numberInSameLine) {
-        // Se encontrou número na mesma linha após vírgula
-        number = numberInSameLine[1];
-        street = addressText.substring(0, addressText.lastIndexOf(',')).trim();
-        console.log('Número encontrado na mesma linha:', number);
-      } else {
-        // Tenta outros padrões de endereço
-        const addressParts = addressText.match(/^([^,]+(?:,[^,]+)*),\s*(\d+)/);
-        if (addressParts) {
-          street = addressParts[1].trim();
-          number = addressParts[2];
-          console.log('Formato de endereço encontrado:', { street, number }, 'usando pattern:', /^([^,]+(?:,[^,]+)*),\s*(\d+)/);
-        }
-      }
-    }
+    // Extrair endereço e número
+    const { street, number } = findAddressAndNumber(text);
+    console.log('Endereço encontrado:', street, 'Número encontrado:', number);
 
     // Extrair complemento
+    let complement = '';
     const complementPatterns = [
-      /Comp:?\s*([^\n]+)/i,
-      /Complemento:?\s*([^\n]+)/i,
-      /Apto?\.?:?\s*([^\n]+)/i,
-      /Apartamento:?\s*([^\n]+)/i,
+      /(?:^|\n|\t)Comp:?\s*([^\n\t]+?)(?:\s+Bairro:|\s*$)/i,
+      /(?:^|\n|\t)Complemento:?\s*([^\n\t]+?)(?:\s+Bairro:|\s*$)/i,
+      /(?:^|\n|\t)Apto?\.?:?\s*([^\n\t]+?)(?:\s+Bairro:|\s*$)/i,
+      /(?:^|\n|\t)Apartamento:?\s*([^\n\t]+?)(?:\s+Bairro:|\s*$)/i,
     ];
 
     for (const pattern of complementPatterns) {
@@ -150,38 +206,44 @@ export function parseOcrSpaceData(text: string): ParseResult {
       }
     }
 
-    // Normalizar endereço
-    if (street) {
-      // Adiciona prefixo "Rua" se não houver tipo de logradouro
-      if (!street.match(/^(Rua|R\.|Av\.|Avenida|Travessa|Rod\.|Rodovia|Alameda|Al\.|Praça|Praca)/i)) {
-        street = 'Rua ' + street;
-      }
-      // Expande abreviações comuns
-      street = street
-        .replace(/^R\./i, 'Rua')
-        .replace(/^Av\./i, 'Avenida')
-        .replace(/^Al\./i, 'Alameda')
-        .replace(/^Rod\./i, 'Rodovia');
+    // Se encontramos um número que parece ser um apartamento/complemento
+    // e não encontramos o número do endereço, usar como número
+    if (!number && complement && /^\d+$/.test(complement)) {
+      number = complement;
+      complement = '';
+      console.log('Usando complemento como número:', number);
     }
 
     // Extrair bairro
-    let neighborhood = '';
-    const neighborhoodMatch = text.match(/Bairro:?\s*([^\n-]+)(?:-[A-Z]{2})?/i);
-    if (neighborhoodMatch) {
-      neighborhood = neighborhoodMatch[1].trim();
-      // Remove possíveis dados de endereço que vieram junto
-      neighborhood = neighborhood.split(/\s+Endereco/i)[0].trim();
-      console.log('Bairro encontrado:', neighborhood, 'usando pattern:', /Bairro:?\s*([^\n-]+)(?:-[A-Z]{2})?/i);
-    }
+    const neighborhood = findNeighborhood(text);
+    console.log('Bairro encontrado:', neighborhood);
 
-    // Extrair cidade
+    // Extrair cidade e estado
     let city = '';
     let state = '';
-    const cityMatch = text.match(/Cidade:?\s*([^\n-]+)(?:\s*-\s*([A-Z]{2}))?/i);
-    if (cityMatch) {
-      city = cityMatch[1].trim();
-      state = cityMatch[2] || '';
-      console.log('Cidade encontrada:', city + (state ? ' - ' + state : ''), 'usando pattern:', /Cidade:?\s*([^\n-]+)(?:\s*-\s*([A-Z]{2}))?/i);
+    const cityPatterns = [
+      /Cidade:?\s*([^\n-]+)(?:\s*-\s*([A-Z]{2}))?/i,
+      /City:?\s*([^\n-]+)(?:\s*-\s*([A-Z]{2}))?/i,
+      /Cldade:?\s*([^\n-]+)(?:\s*-\s*([A-Z]{2}))?/i  // Corrigir erro comum de OCR
+    ];
+
+    for (const pattern of cityPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        city = match[1].trim();
+        state = match[2] || '';
+        console.log('Cidade encontrada:', city, state ? `- ${state}` : '', 'usando pattern:', pattern);
+        break;
+      }
+    }
+
+    // Se não encontrou o estado junto com a cidade, procurar separadamente
+    if (!state) {
+      const stateMatch = text.match(/(?:Estado|UF|State):?\s*([A-Z]{2})/i);
+      if (stateMatch) {
+        state = stateMatch[1].toUpperCase();
+        console.log('Estado encontrado separadamente:', state);
+      }
     }
 
     const data: Partial<DeliveryData> = {
