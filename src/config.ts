@@ -1,6 +1,6 @@
 const API_PORT = 8081;
 const VITE_PORT = 5173;
-const API_HOST = '172.21.48.1';
+const API_HOST = '192.168.15.8';
 
 // URLs base para diferentes serviços
 const API_URL = `http://${API_HOST}:${API_PORT}`;
