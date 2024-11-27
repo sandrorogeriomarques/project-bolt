@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Upload, Loader2 } from 'lucide-react';
+import { Camera, Upload, Loader2, Map } from 'lucide-react';
 import { ImagePreview } from '../components/ImagePreview';
 import { DeliveryInfo } from '../components/DeliveryInfo';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -23,6 +23,20 @@ export function Deliveries() {
       navigate('/login');
     }
   }, [user, navigate]);
+
+  const handleViewRoute = () => {
+    if (deliveries.length === 0) {
+      setError('Adicione pelo menos um ponto de parada para visualizar a rota');
+      return;
+    }
+    
+    // TODO: Implementar visualização da rota
+    console.log('Pontos de parada:', deliveries.map(d => ({
+      id: d.id,
+      address: `${d.street}, ${d.number} - ${d.neighborhood}, ${d.city}`,
+      coordinates: null // TODO: Implementar geocoding
+    })));
+  };
 
   const processImage = async (file: File) => {
     try {
@@ -141,7 +155,7 @@ export function Deliveries() {
           {deliveries.map((delivery, index) => (
             <div key={`${delivery.id}-${delivery.timestamp}`} className="bg-white rounded-lg shadow-lg p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-900">
-                Entrega #{index + 1}
+                Ponto de Parada #{index + 1}
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <ImagePreview imageUrl={delivery.imageUrl} />
@@ -163,23 +177,19 @@ export function Deliveries() {
             />
             <div className="flex items-center justify-center gap-2 bg-white border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 hover:bg-blue-50 transition-colors cursor-pointer">
               <Upload className="w-6 h-6 text-gray-400" />
-              <span className="text-gray-600">Upload de Imagem</span>
+              <span className="text-gray-600">Adicionar Parada</span>
             </div>
           </label>
 
-          <label className="flex-1">
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={e => e.target.files?.[0] && processImage(e.target.files[0])}
-              className="hidden"
-            />
-            <div className="flex items-center justify-center gap-2 bg-white border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 hover:bg-blue-50 transition-colors cursor-pointer">
-              <Camera className="w-6 h-6 text-gray-400" />
-              <span className="text-gray-600">Tirar Foto</span>
-            </div>
-          </label>
+          {deliveries.length > 0 && (
+            <button
+              onClick={handleViewRoute}
+              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white rounded-lg p-4 hover:bg-blue-700 transition-colors"
+            >
+              <Map className="w-6 h-6" />
+              <span>Ver Rota ({deliveries.length} {deliveries.length === 1 ? 'parada' : 'paradas'})</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
