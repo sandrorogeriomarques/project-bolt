@@ -71,6 +71,7 @@ export function Deliveries() {
         orderDate: result.data.data?.orderDate || '',
         totalAmount: result.data.data?.totalAmount,
         store: result.data.data?.store || '',
+        extractedBy: result.data.extractedBy,  
         deliveryPerson: {
           id: '25',
           name: 'Meu claro Principal'

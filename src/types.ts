@@ -23,6 +23,7 @@ export interface DeliveryData {
   neighborhood?: string;
   city?: string;
   complement?: string;
+  extractedBy?: 'ocrspace' | 'googlevision';  // Novo campo para indicar qual API foi usada
   // Dados extraídos do cupom fiscal
   orderNumber?: string;
   orderDate?: string;

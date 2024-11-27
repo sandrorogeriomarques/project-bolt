@@ -30,10 +30,10 @@ export function DeliveryInfo({ data }: DeliveryInfoProps) {
             <h2 className="text-xl font-semibold">Informações do Cliente</h2>
           </div>
           
-          <div className="space-y-2">
+          <div className="space-y-4">
             {data.customerName && (
-              <p className="text-gray-700">
-                <span className="font-semibold">Cliente:</span> {data.customerName}
+              <p>
+                <span className="font-medium">Cliente:</span> {data.customerName}
               </p>
             )}
             {data.deliveryPerson && (
@@ -60,8 +60,8 @@ export function DeliveryInfo({ data }: DeliveryInfoProps) {
               </p>
             )}
             {data.city && (
-              <p className="text-gray-700">
-                <span className="font-semibold">Cidade:</span> {data.city}
+              <p>
+                <span className="font-medium">Cidade:</span> {data.city}
               </p>
             )}
             {data.complement && (
@@ -79,7 +79,7 @@ export function DeliveryInfo({ data }: DeliveryInfoProps) {
             <h2 className="text-xl font-semibold">Informações do Pedido</h2>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-4">
             {data.orderNumber && (
               <p className="text-gray-700">
                 <span className="font-semibold">Número do Pedido:</span> {data.orderNumber}
@@ -95,9 +95,16 @@ export function DeliveryInfo({ data }: DeliveryInfoProps) {
                 <span className="font-semibold">Valor Total:</span> {formatCurrency(data.totalAmount)}
               </p>
             )}
-            <p className="text-gray-700">
-              <span className="font-semibold">Data de Registro:</span> {formatDate(data.timestamp)}
+            <p>
+              <span className="font-medium">Data de Registro:</span>{' '}
+              {new Date(data.timestamp).toLocaleString()}
             </p>
+            {data.extractedBy && (
+              <p>
+                <span className="font-medium">Extraída por:</span>{' '}
+                {data.extractedBy === 'ocrspace' ? 'OCR.space' : 'Google Vision'}
+              </p>
+            )}
           </div>
         </section>
 

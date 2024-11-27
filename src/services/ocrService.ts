@@ -56,7 +56,10 @@ export async function analyzeImageWithFallback(file: File): Promise<OCRResult> {
         return {
           text: result.text,
           source: 'ocrspace',
-          data: result.data
+          data: {
+            ...result.data,
+            extractedBy: 'ocrspace'
+          }
         };
       }
       
@@ -102,7 +105,10 @@ export async function analyzeImageWithFallback(file: File): Promise<OCRResult> {
       return {
         text: visionResult.text,
         source: 'googlevision',
-        data: parsedData
+        data: {
+          ...parsedData,
+          extractedBy: 'googlevision'
+        }
       };
     }
     
