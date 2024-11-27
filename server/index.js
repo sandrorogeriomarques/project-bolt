@@ -123,7 +123,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Erro interno do servidor' });
 });
 
-app.listen(port, () => {
-  console.log(`Servidor rodando na porta ${port}`);
-  console.log(`Servindo arquivos estáticos de: ${path.join(__dirname, '../public')}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Servidor rodando em http://0.0.0.0:${port}`);
+  console.log('Para acessar de outros dispositivos na rede, use o IP da máquina');
 });
