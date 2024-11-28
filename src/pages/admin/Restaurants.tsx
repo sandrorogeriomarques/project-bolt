@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit2, PlusCircle, CheckCircle, XCircle } from 'react-feather';
+import { Pencil, PlusCircle, CheckCircle, XCircle } from 'lucide-react';
 import { getRestaurants, updateRestaurant } from '../../services/restaurantService';
 import { Restaurant } from '../../types';
 
@@ -176,7 +176,7 @@ export default function Restaurants() {
                             to={`/admin/restaurants/${restaurant.id}`}
                             className="text-blue-600 hover:text-blue-900"
                           >
-                            <Edit2 className="h-5 w-5" />
+                            <Pencil className="h-5 w-5" />
                           </Link>
                           <button
                             onClick={() => handleToggleStatus(restaurant)}
