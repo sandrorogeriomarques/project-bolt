@@ -52,16 +52,74 @@ export function Deliveries() {
         throw new Error('O arquivo deve ser uma imagem');
       }
 
-      const MAX_SIZE = 1024 * 1024; // 1MB
-      if (file.size > MAX_SIZE) {
-        throw new Error('A imagem deve ter no máximo 1MB');
-      }
-
+      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
       console.log('Processando imagem:', file.name);
       console.log('Tipo:', file.type);
-      console.log('Tamanho:', (file.size / 1024).toFixed(2) + 'KB');
+      console.log('Tamanho original:', (file.size / 1024).toFixed(2) + 'KB');
 
-      const result = await analyzeImageWithFallback(file);
+      // Se a imagem for maior que 10MB, tenta redimensionar
+      let processedFile = file;
+      if (file.size > MAX_SIZE) {
+        try {
+          const canvas = document.createElement('canvas');
+          const img = new Image();
+          
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = URL.createObjectURL(file);
+          });
+
+          // Calcula as novas dimensões mantendo a proporção
+          let width = img.width;
+          let height = img.height;
+          const maxDimension = 2048;
+
+          if (width > height && width > maxDimension) {
+            height = (height * maxDimension) / width;
+            width = maxDimension;
+          } else if (height > maxDimension) {
+            width = (width * maxDimension) / height;
+            height = maxDimension;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // Converte para JPEG com qualidade reduzida
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          const byteString = atob(dataUrl.split(',')[1]);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+
+          processedFile = new File([ab], file.name, {
+            type: 'image/jpeg',
+            lastModified: Date.now()
+          });
+
+          console.log('Imagem redimensionada:', {
+            larguraOriginal: img.width,
+            alturaOriginal: img.height,
+            larguraNova: width,
+            alturaNova: height,
+            tamanhoNovo: (processedFile.size / 1024).toFixed(2) + 'KB'
+          });
+
+          URL.revokeObjectURL(img.src);
+        } catch (error) {
+          console.error('Erro ao redimensionar:', error);
+          throw new Error('Não foi possível processar a imagem. Tente uma imagem menor.');
+        }
+      }
+
+      const result = await analyzeImageWithFallback(processedFile);
       console.log('Resultado do OCR:', result);
 
       if (!result.data) {
@@ -73,7 +131,7 @@ export function Deliveries() {
       // Criar nova entrega usando o ID do pedido
       const newDelivery: DeliveryData = {
         id: result.data.data?.id || '',  
-        imageUrl: URL.createObjectURL(file),
+        imageUrl: URL.createObjectURL(processedFile),
         timestamp: Date.now(),
         customerName: result.data.data?.customerName || '',
         street: result.data.data?.street || '',
@@ -91,17 +149,6 @@ export function Deliveries() {
           name: 'Meu claro Principal'
         }
       };
-
-      console.log('Nova entrega antes da validação:', newDelivery);
-
-      // Validar ID
-      if (!newDelivery.id) {
-        console.error('ID não encontrado. Dados completos:', {
-          resultData: result.data,
-          newDelivery
-        });
-        throw new Error('ID do pedido não encontrado na imagem');
-      }
 
       console.log('Nova entrega:', newDelivery);
       setDeliveries(prev => [...prev, newDelivery]);
