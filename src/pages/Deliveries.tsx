@@ -3,7 +3,6 @@ import { Camera, Upload, Loader2, Map } from 'lucide-react';
 import { ImagePreview } from '../components/ImagePreview';
 import { DeliveryInfo } from '../components/DeliveryInfo';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { RouteCard } from '../components/RouteCard';
 import { parseDeliveryData } from '../utils/parseDeliveryData';
 import { analyzeImageWithFallback } from '../services/ocrService';
 import type { DeliveryData } from '../types';
@@ -147,10 +146,10 @@ export function Deliveries() {
         totalAmount: result.data.data?.totalAmount,
         store: result.data.data?.store || '',
         extractedBy: result.data.extractedBy,  
-        deliveryPerson: {
-          id: '25',
-          name: 'Meu claro Principal'
-        }
+        deliveryPerson: user ? {
+          id: user.id.toString(),
+          name: user.name
+        } : undefined
       };
 
       console.log('Nova entrega:', newDelivery);
@@ -238,9 +237,6 @@ export function Deliveries() {
           </div>
         </div>
       )}
-
-      {/* Componente de Rota */}
-      <RouteCard />
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
         <div className="max-w-4xl mx-auto flex justify-center gap-4">

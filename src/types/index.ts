@@ -1,22 +1,22 @@
 export interface Restaurant {
   id: number;
-  field_3040210: string; // name
-  field_3040211: string; // street
-  field_3040212: string; // number
-  field_3040213: string; // neighborhood
-  field_3040215: string; // city
-  field_3040216: string; // state
-  field_3040217: string; // postal_code
+  field_3040201: string; // name
   field_3040218: string; // full_address
   field_3040219: string; // coordinates
   field_3040220: boolean; // active
+  field_3040221: string; // street
+  field_3040222: string; // number
+  field_3040223: string; // neighborhood
+  field_3040224: string; // city
+  field_3040225: string; // state
+  field_3040226: string; // postal_code
 }
 
 export interface User {
   id: number;
   field_3040201: string; // name
-  field_3040202: string; // avatar
-  field_3040203: string; // whatsapp
+  field_3016950: string; // avatar
+  field_3016951: string; // whatsapp
   name: string;
   avatar: string;
   whatsapp: string;
@@ -70,4 +70,8 @@ export interface ViaCepResponse {
   gia: string;
   ddd: string;
   siafi: string;
+  street?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
 }

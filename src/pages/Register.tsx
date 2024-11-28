@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { whatsappService } from '../services/whatsappService';
 import { useUserStore } from '../stores/userStore';
@@ -23,6 +23,8 @@ export function Register() {
     setLoading(true);
 
     try {
+      console.log('Tentando registrar usuário:', formData);
+
       // Verificar se o WhatsApp já existe
       const response = await axios.get(
         `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`,
@@ -31,19 +33,38 @@ export function Register() {
             'Authorization': `Token ${BASEROW_TOKEN}`,
           },
           params: {
-            'search': formData.whatsapp,
-            'user_field_names': true
+            'filter__field_3016951__equal': formData.whatsapp,
           }
         }
       );
 
-      const userExists = response.data.results.find((u: any) => u.WhatsApp === formData.whatsapp);
+      console.log('Resposta da verificação:', response.data);
 
-      if (userExists) {
+      if (response.data.results.length > 0) {
         toast.error('Este WhatsApp já está cadastrado. Por favor, faça login.');
         navigate('/login');
         return;
       }
+
+      console.log('WhatsApp disponível, criando usuário...');
+
+      // Criar novo usuário no Baserow
+      const createResponse = await axios.post(
+        `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`,
+        {
+          field_3040201: formData.name, // Nome
+          field_3016951: formData.whatsapp, // WhatsApp
+        },
+        {
+          headers: {
+            'Authorization': `Token ${BASEROW_TOKEN}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+
+      console.log('Usuário criado:', createResponse.data);
+      const newUser = createResponse.data;
 
       // Gerar código de verificação
       const verificationCode = whatsappService.generateVerificationCode();
@@ -57,11 +78,16 @@ export function Register() {
 
       if (sent) {
         // Salvar dados temporários
-        setTempUser({
+        const tempUser = {
+          id: newUser.id,
           name: formData.name,
           whatsapp: formData.whatsapp,
-          verificationCode
-        });
+          verificationCode,
+          avatar: ''
+        };
+
+        console.log('Salvando dados temporários:', tempUser);
+        setTempUser(tempUser);
 
         // Redirecionar para página de verificação
         console.log('Redirecionando para verificação...');
@@ -70,7 +96,7 @@ export function Register() {
         toast.error('Erro ao enviar código de verificação');
       }
     } catch (error) {
-      console.error('Erro no registro:', error);
+      console.error('Erro detalhado no registro:', error);
       toast.error('Erro ao processar registro');
     } finally {
       setLoading(false);
@@ -99,9 +125,9 @@ export function Register() {
               type="text"
               value={formData.name}
               onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              required
               disabled={loading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
@@ -111,7 +137,7 @@ export function Register() {
             </label>
             <WhatsAppInput
               value={formData.whatsapp}
-              onChange={value => setFormData(prev => ({ ...prev, whatsapp: value }))}
+              onChange={(value) => setFormData(prev => ({ ...prev, whatsapp: value }))}
               disabled={loading}
             />
           </div>
@@ -121,18 +147,14 @@ export function Register() {
             disabled={loading || !formData.name || !formData.whatsapp}
             className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Processando...' : 'Continuar'}
+            {loading ? 'Processando...' : 'Criar Conta'}
           </button>
 
           <p className="text-center text-sm text-gray-600">
             Já tem uma conta?{' '}
-            <button
-              type="button"
-              onClick={() => navigate('/login')}
-              className="text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Entrar
-            </button>
+            <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
+              Faça login
+            </Link>
           </p>
         </form>
       </div>

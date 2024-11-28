@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { whatsappService } from '../services/whatsappService';
 import { useUserStore } from '../stores/userStore';
 import { WhatsAppInput } from '../components/WhatsAppInput';
-import { Link } from 'react-router-dom';
 import axios from 'axios';
 
 const BASEROW_TOKEN = '0lsB6U6zcpKt8W4f9pydlsvJnibOASeI';
@@ -22,6 +21,8 @@ export function Login() {
     setLoading(true);
 
     try {
+      console.log('Tentando login com WhatsApp:', whatsapp);
+
       // Buscar usuário no Baserow pelo WhatsApp
       const response = await axios.get(
         `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`, {
@@ -29,16 +30,29 @@ export function Login() {
             'Authorization': `Token ${BASEROW_TOKEN}`,
           },
           params: {
-            'search': whatsapp,
-            'user_field_names': true
+            'filter__field_3016951__equal': whatsapp,
           }
         }
       );
 
-      const users = response.data.results;
-      const user = users.find((u: any) => u.WhatsApp === whatsapp);
+      console.log('Resposta do Baserow:', response.data);
 
-      if (user) {
+      const users = response.data.results;
+      
+      if (users && users.length > 0) {
+        const user = users[0];
+        console.log('Usuário encontrado:', user);
+
+        // Mapear os campos do Baserow para o formato da aplicação
+        const mappedUser = {
+          id: user.id,
+          name: user.field_3040201,
+          whatsapp: user.field_3016951,
+          avatar: user.field_3016950 || ''
+        };
+
+        console.log('Usuário mapeado:', mappedUser);
+
         // Gerar código de verificação
         const verificationCode = whatsappService.generateVerificationCode();
         console.log('Código gerado:', verificationCode);
@@ -52,7 +66,7 @@ export function Login() {
         if (sent) {
           // Salvar dados temporários
           setTempUser({
-            whatsapp,
+            ...mappedUser,
             verificationCode
           });
 
@@ -63,10 +77,11 @@ export function Login() {
           toast.error('Erro ao enviar código de verificação');
         }
       } else {
+        console.log('Nenhum usuário encontrado com este WhatsApp');
         toast.error('Usuário não encontrado');
       }
     } catch (error) {
-      console.error('Erro no login:', error);
+      console.error('Erro detalhado no login:', error);
       toast.error('Erro ao processar login');
     } finally {
       setLoading(false);

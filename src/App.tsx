@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { Login } from './pages/Login';
+import { Register } from './pages/Register';
 import { Profile } from './pages/Profile';
 import { Settings } from './pages/Settings';
 import { Deliveries } from './pages/Deliveries';
@@ -18,10 +19,13 @@ function App() {
   return (
     <Router>
       <div>
+        <Toaster position="top-right" />
         <Routes>
           {/* Rotas públicas */}
+          <Route path="/" element={!user ? <Login /> : <Navigate to="/dashboard" replace />} />
           <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" replace />} />
-          <Route path="/verify" element={!user ? <VerifyCode /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/verify-code" element={!user ? <VerifyCode /> : <Navigate to="/dashboard" replace />} />
 
           {/* Rotas protegidas */}
           <Route path="/dashboard" element={
@@ -98,10 +102,11 @@ function App() {
           } />
 
           {/* Rota padrão */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        <Toaster position="top-right" />
       </div>
     </Router>
   );
 }
+
+export default App;

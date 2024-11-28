@@ -1,15 +1,7 @@
 import axios from 'axios';
 
-const BASEROW_API_URL = import.meta.env.VITE_BASEROW_API_URL;
-const BASEROW_TOKEN = import.meta.env.VITE_BASEROW_TOKEN;
-
-if (!BASEROW_API_URL) {
-  throw new Error('VITE_BASEROW_API_URL não encontrada');
-}
-
-if (!BASEROW_TOKEN) {
-  throw new Error('VITE_BASEROW_TOKEN não encontrada');
-}
+const BASEROW_API_URL = import.meta.env.VITE_BASEROW_API_URL || 'https://api.baserow.io/api';
+const BASEROW_TOKEN = import.meta.env.VITE_BASEROW_TOKEN || '0lsB6U6zcpKt8W4f9pydlsvJnibOASeI';
 
 export const baserowApi = axios.create({
   baseURL: BASEROW_API_URL,

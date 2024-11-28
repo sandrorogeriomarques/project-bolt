@@ -5,7 +5,7 @@ import axios from 'axios';
 
 interface BaserowUpdates {
   field_3040201?: string; // Nome
-  field_3016950?: string; // Avatar - ID correto do campo
+  field_3016950?: string; // Avatar - Campo correto do Baserow
   field_3040203?: string; // WhatsApp
 }
 
@@ -20,8 +20,8 @@ interface UserState {
 }
 
 const BASEROW_API = 'https://api.baserow.io/api';
-const BASEROW_TOKEN = '0lsB6U6zcpKt8W4f9pydlsvJnibOASeI';
-const USERS_TABLE_ID = '396313';
+const BASEROW_TOKEN = import.meta.env.VITE_BASEROW_TOKEN || '0lsB6U6zcpKt8W4f9pydlsvJnibOASeI';
+const USERS_TABLE_ID = import.meta.env.VITE_USERS_TABLE_ID || '396313';
 
 export const useUserStore = create<UserState>()(
   persist(
@@ -116,7 +116,7 @@ export const useUserStore = create<UserState>()(
       },
       logout: () => {
         set({ user: null, isAuthenticated: false, tempUser: null });
-      },
+      }
     }),
     {
       name: 'user-storage',
