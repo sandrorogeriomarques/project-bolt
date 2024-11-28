@@ -5,38 +5,103 @@ import { Profile } from './pages/Profile';
 import { Settings } from './pages/Settings';
 import { Deliveries } from './pages/Deliveries';
 import { Navigation } from './components/Navigation';
-import AdminRestaurants from './pages/admin/Restaurants';
-import { RestaurantForm } from './pages/admin/RestaurantForm';
+import { VerifyCode } from './pages/VerifyCode';
+import Restaurants from './pages/admin/Restaurants';
+import RestaurantForm from './pages/admin/RestaurantForm';
 import { useUserStore } from './stores/userStore';
 import { Home } from './pages/Home';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 function App() {
   const user = useUserStore(state => state.user);
 
-  if (!user) {
-    return <Login />;
-  }
-
   return (
     <Router>
       <div>
-        <Navigation />
-        <main className="mt-16">
-          <Routes>
-            <Route path="/dashboard" element={<Home />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/deliveries" element={<Deliveries />} />
-            <Route path="/admin/restaurants" element={<AdminRestaurants />} />
-            <Route path="/admin/restaurants/new" element={<RestaurantForm />} />
-            <Route path="/admin/restaurants/:id" element={<RestaurantForm />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </main>
+        <Routes>
+          {/* Rotas públicas */}
+          <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/verify" element={!user ? <VerifyCode /> : <Navigate to="/dashboard" replace />} />
+
+          {/* Rotas protegidas */}
+          <Route path="/dashboard" element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50">
+                <Navigation />
+                <div className="pt-16">
+                  <Home />
+                </div>
+              </div>
+            </ProtectedRoute>
+          } />
+          <Route path="/deliveries" element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50">
+                <Navigation />
+                <div className="pt-16">
+                  <Deliveries />
+                </div>
+              </div>
+            </ProtectedRoute>
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50">
+                <Navigation />
+                <div className="pt-16">
+                  <Profile />
+                </div>
+              </div>
+            </ProtectedRoute>
+          } />
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50">
+                <Navigation />
+                <div className="pt-16">
+                  <Settings />
+                </div>
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Rotas de Restaurantes */}
+          <Route path="/admin/restaurants" element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50">
+                <Navigation />
+                <div className="pt-16">
+                  <Restaurants />
+                </div>
+              </div>
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/restaurants/new" element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50">
+                <Navigation />
+                <div className="pt-16">
+                  <RestaurantForm />
+                </div>
+              </div>
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/restaurants/:id" element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50">
+                <Navigation />
+                <div className="pt-16">
+                  <RestaurantForm />
+                </div>
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Rota padrão */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
         <Toaster position="top-right" />
       </div>
     </Router>
   );
 }
-
-export default App;

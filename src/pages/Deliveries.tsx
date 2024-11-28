@@ -3,14 +3,17 @@ import { Camera, Upload, Loader2, Map } from 'lucide-react';
 import { ImagePreview } from '../components/ImagePreview';
 import { DeliveryInfo } from '../components/DeliveryInfo';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { RouteCard } from '../components/RouteCard';
 import { parseDeliveryData } from '../utils/parseDeliveryData';
 import { analyzeImageWithFallback } from '../services/ocrService';
 import type { DeliveryData } from '../types';
 import { useUserStore } from '../stores/userStore';
+import { useRouteStore } from '../stores/routeStore';
 import { useNavigate } from 'react-router-dom';
 
 export function Deliveries() {
   const user = useUserStore(state => state.user);
+  const addDeliveryPoint = useRouteStore(state => state.addDeliveryPoint);
   const navigate = useNavigate();
   const [deliveries, setDeliveries] = useState<DeliveryData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -152,6 +155,8 @@ export function Deliveries() {
 
       console.log('Nova entrega:', newDelivery);
       setDeliveries(prev => [...prev, newDelivery]);
+      // Adicionar o ponto à rota
+      addDeliveryPoint(newDelivery);
       setError('');
     } catch (error) {
       console.error('Erro ao processar imagem:', error);
@@ -233,6 +238,9 @@ export function Deliveries() {
           </div>
         </div>
       )}
+
+      {/* Componente de Rota */}
+      <RouteCard />
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
         <div className="max-w-4xl mx-auto flex justify-center gap-4">

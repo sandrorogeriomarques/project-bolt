@@ -72,11 +72,16 @@ export function Settings() {
       const normalizedAvatarPath = avatarPath.startsWith('/') ? avatarPath : `/${avatarPath}`;
       
       // Atualiza o usuário no Baserow com o caminho do avatar
-      await updateUser({ avatar: normalizedAvatarPath });
+      await updateUser({ 
+        avatar: normalizedAvatarPath,
+        // Remover a / inicial para o Baserow
+        field_3040202: normalizedAvatarPath.replace(/^\/+/, '')
+      });
       
       console.warn('USER UPDATE COMPLETED:', {
         userId: user.id,
-        newAvatarPath: normalizedAvatarPath
+        newAvatarPath: normalizedAvatarPath,
+        baserowPath: normalizedAvatarPath.replace(/^\/+/, '')
       });
       
       toast.success('Avatar atualizado com sucesso!');

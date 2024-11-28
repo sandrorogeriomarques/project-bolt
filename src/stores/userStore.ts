@@ -4,9 +4,9 @@ import { User, TempUser } from '../types';
 import axios from 'axios';
 
 interface BaserowUpdates {
-  Nome?: string;
-  Avatar?: string;
-  WhatsApp?: string;
+  field_3040201?: string; // Nome
+  field_3016950?: string; // Avatar - ID correto do campo
+  field_3040203?: string; // WhatsApp
 }
 
 interface UserState {
@@ -18,6 +18,10 @@ interface UserState {
   updateUser: (updates: Partial<User>) => Promise<void>;
   logout: () => void;
 }
+
+const BASEROW_API = 'https://api.baserow.io/api';
+const BASEROW_TOKEN = '0lsB6U6zcpKt8W4f9pydlsvJnibOASeI';
+const USERS_TABLE_ID = '396313';
 
 export const useUserStore = create<UserState>()(
   persist(
@@ -38,28 +42,31 @@ export const useUserStore = create<UserState>()(
             currentUserState: JSON.stringify(currentUser)
           });
 
-          const baserowUpdates: BaserowUpdates = {
-            Nome: updates.name,
-            Avatar: updates.avatar ? updates.avatar.replace(/^\/+/, '') : undefined,
-            WhatsApp: updates.whatsapp
-          };
+          const baserowUpdates: BaserowUpdates = {};
+          
+          // Mapear os campos de forma explícita
+          if (updates.name !== undefined) {
+            baserowUpdates.field_3040201 = updates.name;
+          }
+          if (updates.avatar !== undefined) {
+            // Remover a barra inicial e atualizar o campo correto
+            baserowUpdates.field_3016950 = updates.avatar.replace(/^\/+/, '');
+          }
+          if (updates.whatsapp !== undefined) {
+            baserowUpdates.field_3040203 = updates.whatsapp;
+          }
 
-          // Filtrar campos undefined de uma maneira type-safe
-          const filteredUpdates: BaserowUpdates = {};
-          (Object.keys(baserowUpdates) as Array<keyof BaserowUpdates>).forEach(key => {
-            if (baserowUpdates[key] !== undefined) {
-              filteredUpdates[key] = baserowUpdates[key];
-            }
-          });
+          console.log('Dados formatados para Baserow:', baserowUpdates);
 
-          console.log('Dados formatados para Baserow:', filteredUpdates);
+          const baserowUrl = `${BASEROW_API}/database/rows/table/${USERS_TABLE_ID}/${currentUser.id}/`;
+          console.log('URL do Baserow:', baserowUrl);
 
           const response = await axios.patch(
-            `https://api.baserow.io/api/database/rows/table/396313/${currentUser.id}/?user_field_names=true`,
-            filteredUpdates,
+            baserowUrl,
+            baserowUpdates,
             {
               headers: {
-                'Authorization': 'Token 0lsB6U6zcpKt8W4f9pydlsvJnibOASeI',
+                'Authorization': `Token ${BASEROW_TOKEN}`,
                 'Content-Type': 'application/json',
               },
             }
@@ -67,7 +74,13 @@ export const useUserStore = create<UserState>()(
 
           console.log('Resposta do Baserow:', {
             status: response.status,
-            data: response.data
+            data: response.data,
+            requestUrl: baserowUrl,
+            requestData: baserowUpdates,
+            requestHeaders: {
+              'Authorization': 'Token [HIDDEN]',
+              'Content-Type': 'application/json',
+            }
           });
 
           const updatedUser = {
@@ -85,7 +98,16 @@ export const useUserStore = create<UserState>()(
             console.error('Detalhes do erro do Baserow:', {
               response: error.response?.data,
               status: error.response?.status,
-              headers: error.response?.headers
+              headers: error.response?.headers,
+              config: {
+                url: error.config?.url,
+                method: error.config?.method,
+                data: error.config?.data,
+                headers: {
+                  ...error.config?.headers,
+                  'Authorization': '[HIDDEN]'
+                }
+              }
             });
           }
           
@@ -94,15 +116,10 @@ export const useUserStore = create<UserState>()(
       },
       logout: () => {
         set({ user: null, isAuthenticated: false, tempUser: null });
-        localStorage.removeItem('user-storage');
       },
     }),
     {
       name: 'user-storage',
-      partialize: (state: UserState) => ({ 
-        user: state.user, 
-        isAuthenticated: state.isAuthenticated 
-      }),
     }
   )
 );
