@@ -13,6 +13,7 @@ export function Navigation() {
   const navigation = [
     { name: 'Início', href: '/dashboard', icon: Home },
     { name: 'Entregas', href: '/deliveries', icon: Package },
+    { name: 'Restaurantes', href: '/admin/restaurants', icon: MapPin },
     { name: 'Perfil', href: '/profile', icon: User },
     { name: 'Configurações', href: '/settings', icon: Settings },
   ];

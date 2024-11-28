@@ -9,6 +9,8 @@ import { Deliveries } from './pages/Deliveries';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Navigation } from './components/Navigation';
 import { VerifyCode } from './pages/VerifyCode';
+import Restaurants from './pages/admin/Restaurants';
+import RestaurantForm from './pages/admin/RestaurantForm';
 
 function App() {
   return (
@@ -58,6 +60,38 @@ function App() {
               <Navigation />
               <div className="pt-16">
                 <Settings />
+              </div>
+            </div>
+          </ProtectedRoute>
+        } />
+
+        {/* Rotas de Restaurantes */}
+        <Route path="/admin/restaurants" element={
+          <ProtectedRoute>
+            <div className="min-h-screen bg-gray-50">
+              <Navigation />
+              <div className="pt-16">
+                <Restaurants />
+              </div>
+            </div>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/restaurants/new" element={
+          <ProtectedRoute>
+            <div className="min-h-screen bg-gray-50">
+              <Navigation />
+              <div className="pt-16">
+                <RestaurantForm />
+              </div>
+            </div>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/restaurants/:id" element={
+          <ProtectedRoute>
+            <div className="min-h-screen bg-gray-50">
+              <Navigation />
+              <div className="pt-16">
+                <RestaurantForm />
               </div>
             </div>
           </ProtectedRoute>
