@@ -12,6 +12,21 @@ export interface Restaurant {
   field_3040220: boolean; // active
 }
 
+export interface User {
+  id: number;
+  field_3040201: string; // name
+  field_3040202: string; // avatar
+  field_3040203: string; // whatsapp
+  name: string;
+  avatar: string;
+  whatsapp: string;
+}
+
+export interface TempUser {
+  whatsapp: string;
+  code: string;
+}
+
 export interface UserPreferences {
   id: number;
   user_id: number;

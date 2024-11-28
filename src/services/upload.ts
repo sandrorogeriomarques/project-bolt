@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { config } from '../config';
 
-const API_URL = 'http://localhost:3001';
+const API_URL = config.apiUrl;
 
 export async function uploadImage(file: File, type: 'avatar' | 'receipt'): Promise<string> {
   const formData = new FormData();

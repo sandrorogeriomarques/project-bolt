@@ -4,9 +4,9 @@ import { User, TempUser } from '../types';
 import axios from 'axios';
 
 interface BaserowUpdates {
-  Nome?: string;
-  Avatar?: string;
-  WhatsApp?: string;
+  field_3040201?: string; // Nome
+  field_3040202?: string; // Avatar
+  field_3040203?: string; // WhatsApp
 }
 
 interface UserState {
@@ -39,9 +39,9 @@ export const useUserStore = create<UserState>()(
           });
 
           const baserowUpdates: BaserowUpdates = {
-            Nome: updates.name,
-            Avatar: updates.avatar ? updates.avatar.replace(/^\/+/, '') : undefined,
-            WhatsApp: updates.whatsapp
+            field_3040201: updates.name,
+            field_3040202: updates.avatar ? updates.avatar.replace(/^\/+/, '') : undefined,
+            field_3040203: updates.whatsapp
           };
 
           // Filtrar campos undefined de uma maneira type-safe
@@ -55,7 +55,7 @@ export const useUserStore = create<UserState>()(
           console.log('Dados formatados para Baserow:', filteredUpdates);
 
           const response = await axios.patch(
-            `https://api.baserow.io/api/database/rows/table/396313/${currentUser.id}/?user_field_names=true`,
+            `https://api.baserow.io/api/database/rows/table/396313/${currentUser.id}/`,
             filteredUpdates,
             {
               headers: {

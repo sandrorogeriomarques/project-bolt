@@ -72,7 +72,10 @@ export function Settings() {
       const normalizedAvatarPath = avatarPath.startsWith('/') ? avatarPath : `/${avatarPath}`;
       
       // Atualiza o usuário no Baserow com o caminho do avatar
-      await updateUser({ avatar: normalizedAvatarPath });
+      await updateUser({ 
+        avatar: normalizedAvatarPath,
+        field_3040202: normalizedAvatarPath // Garantir que o campo do Baserow seja atualizado
+      });
       
       console.warn('USER UPDATE COMPLETED:', {
         userId: user.id,
