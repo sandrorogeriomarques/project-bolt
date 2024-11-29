@@ -1,9 +1,9 @@
 const API_PORT = 8081;
 const VITE_PORT = 5173;
-const API_HOST = import.meta.env.PROD ? '192.168.15.8' : 'localhost';
+const API_HOST = 'localhost';  // Always use localhost in development
 
 // URLs base para diferentes serviços
-const API_URL = `http://${API_HOST}:${API_PORT}`;
+const API_URL = `/api`;  // Use relative path to work with Vite proxy
 const FRONTEND_URL = `http://${API_HOST}:${VITE_PORT}`;
 
 export const config = {

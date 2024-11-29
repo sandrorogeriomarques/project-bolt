@@ -215,7 +215,7 @@ export function Deliveries() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 pb-32">
+    <div className="max-w-4xl mx-auto p-6 pb-32 mt-16">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
           Entregas
@@ -316,7 +316,7 @@ export function Deliveries() {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-[900]">
         <div className="max-w-4xl mx-auto flex justify-center gap-4">
           <label className="flex-1">
             <input
