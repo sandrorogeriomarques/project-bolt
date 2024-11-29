@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { config } from '../config';
 
-const API_URL = config.apiUrl;
-
 export async function uploadImage(file: File, type: 'avatar' | 'receipt'): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
@@ -13,23 +11,15 @@ export async function uploadImage(file: File, type: 'avatar' | 'receipt'): Promi
       fileName: file.name,
       fileType: file.type,
       fileSize: file.size,
-      uploadType: type,
-      apiUrl: API_URL
+      uploadType: type
     });
 
-    // Validar se o servidor está acessível
-    try {
-      await axios.get(`${API_URL}/`, { timeout: 2000 });
-    } catch (error) {
-      console.error('UPLOAD_SERVER_CHECK_FAILED:', error);
-      throw new Error('Servidor de upload não está acessível. Verifique se o servidor está rodando.');
-    }
-
-    const response = await axios.post(`${API_URL}/upload`, formData, {
+    // Enviar o arquivo para o servidor
+    const response = await axios.post('/api/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 30000, // Aumentar timeout para 30 segundos
+      timeout: 30000, // 30 segundos
       onUploadProgress: (progressEvent) => {
         const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
         console.log(`Upload progress: ${percentCompleted}%`);
@@ -48,18 +38,8 @@ export async function uploadImage(file: File, type: 'avatar' | 'receipt'): Promi
       throw new Error('Resposta inválida do servidor de upload');
     }
 
-    // Normalizar o caminho: remover 'public' e substituir backslashes por forward slashes
-    const normalizedPath = response.data.path
-      .replace(/^public\\/, '') // Remove 'public\' do início
-      .replace(/^public\//, '') // Remove 'public/' do início
-      .replace(/\\/g, '/'); // Substituir backslashes por forward slashes
-
-    console.warn('UPLOAD_SUCCESS:', {
-      originalPath: response.data.path,
-      normalizedPath: normalizedPath
-    });
-
-    return normalizedPath;
+    // Retornar o caminho do arquivo
+    return response.data.path;
   } catch (error) {
     console.error('UPLOAD_ERROR:', error);
     
@@ -98,7 +78,7 @@ export async function analyzeImage(file: File): Promise<string> {
   formData.append('file', file);
 
   try {
-    const response = await axios.post(`${API_URL}/analyze`, formData, {
+    const response = await axios.post(`${config.apiUrl}/analyze`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

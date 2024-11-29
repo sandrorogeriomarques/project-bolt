@@ -1,6 +1,6 @@
 const API_PORT = 8081;
 const VITE_PORT = 5173;
-const API_HOST = '192.168.15.8';
+const API_HOST = import.meta.env.PROD ? '192.168.15.8' : 'localhost';
 
 // URLs base para diferentes serviços
 const API_URL = `http://${API_HOST}:${API_PORT}`;

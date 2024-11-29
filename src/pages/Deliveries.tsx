@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Upload, Loader2, Map } from 'lucide-react';
+import { Camera, Upload, Loader2, Map, Plus, Check } from 'lucide-react';
 import { ImagePreview } from '../components/ImagePreview';
 import { DeliveryInfo } from '../components/DeliveryInfo';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { parseDeliveryData } from '../utils/parseDeliveryData';
 import { analyzeImageWithFallback } from '../services/ocrService';
-import type { DeliveryData } from '../types';
+import { getUserPreferences } from '../services/userPreferencesService';
+import { getRestaurant } from '../services/restaurantService';
+import { DeliveryMap } from '../components/DeliveryMap';
+import type { DeliveryData, Restaurant } from '../types';
 import { useUserStore } from '../stores/userStore';
 import { useRouteStore } from '../stores/routeStore';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +22,31 @@ export function Deliveries() {
   const [error, setError] = useState<string | null>(null);
   const [currentService, setCurrentService] = useState<string>('OCR.space');
   const [deliveryData, setDeliveryData] = useState<DeliveryData | null>(null);
+  const [showMap, setShowMap] = useState(false);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    // Carregar restaurante selecionado
+    const loadSelectedRestaurant = async () => {
+      try {
+        const preferences = await getUserPreferences(Number(user.id));
+        if (preferences?.field_3040270) {
+          const restaurant = await getRestaurant(preferences.field_3040270);
+          setSelectedRestaurant(restaurant);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar restaurante:', error);
+        setError('Erro ao carregar restaurante selecionado. Por favor, verifique suas configurações.');
+      }
+    };
+
+    loadSelectedRestaurant();
+  }, [user, navigate]);
 
   useEffect(() => {
     if (!user) {
@@ -31,13 +59,29 @@ export function Deliveries() {
       setError('Adicione pelo menos um ponto de parada para visualizar a rota');
       return;
     }
-    
-    // TODO: Implementar visualização da rota
-    console.log('Pontos de parada:', deliveries.map(d => ({
-      id: d.id,
-      address: `${d.street}, ${d.number} - ${d.neighborhood}, ${d.city}`,
-      coordinates: null // TODO: Implementar geocoding
+
+    if (!selectedRestaurant) {
+      setError('Selecione um restaurante nas configurações antes de visualizar a rota');
+      return;
+    }
+
+    console.log('Endereço do restaurante:', selectedRestaurant.field_3040218);
+    console.log('Pontos de entrega:', deliveries.map(d => ({
+      address: `${d.street}, ${d.number}, ${d.neighborhood}, ${d.city}, ${selectedRestaurant.field_3040216}`,
+      customerName: d.customerName,
+      id: d.id
     })));
+
+    setShowMap(true);
+  };
+
+  const handleAddMoreDeliveries = () => {
+    setShowMap(false);
+  };
+
+  const handleFinishRoute = () => {
+    // TODO: Implementar lógica para finalizar rota
+    console.log('Finalizando rota...');
   };
 
   const processImage = async (file: File) => {
@@ -232,6 +276,40 @@ export function Deliveries() {
               >
                 <Map className="w-5 h-5" />
                 <span>Ver Rota</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMap && selectedRestaurant && (
+        <div className="mb-6">
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900">
+              Rota de Entrega
+            </h2>
+            <DeliveryMap
+              restaurantAddress={selectedRestaurant.field_3040218}
+              deliveryPoints={deliveries.map(d => ({
+                address: `${d.street}, ${d.number}, ${d.neighborhood}, ${d.city}, ${selectedRestaurant.field_3040216}`,
+                customerName: d.customerName,
+                id: d.id
+              }))}
+            />
+            <div className="mt-6 flex justify-end gap-4">
+              <button
+                onClick={handleAddMoreDeliveries}
+                className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 rounded-lg px-6 py-3 hover:bg-gray-200 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Entrega</span>
+              </button>
+              <button
+                onClick={handleFinishRoute}
+                className="flex items-center justify-center gap-2 bg-green-600 text-white rounded-lg px-6 py-3 hover:bg-green-700 transition-colors"
+              >
+                <Check className="w-5 h-5" />
+                <span>Concluir Rota</span>
               </button>
             </div>
           </div>
