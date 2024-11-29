@@ -12,16 +12,16 @@ export default function RestaurantForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Restaurant>>({
-    field_3040201: '', // name
+    field_3040210: '', // name
+    field_3040211: '', // street
+    field_3040212: '', // number
+    field_3040213: '', // neighborhood
+    field_3040215: '', // city
+    field_3040216: '', // state
+    field_3040217: '', // postal_code
     field_3040218: '', // full_address
     field_3040219: '', // coordinates
     field_3040220: true, // active
-    field_3040221: '', // street
-    field_3040222: '', // number
-    field_3040223: '', // neighborhood
-    field_3040224: '', // city
-    field_3040225: '', // state
-    field_3040226: '', // postal_code
   });
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export default function RestaurantForm() {
     const formattedCep = formatCep(e.target.value);
     setFormData(prev => ({
       ...prev,
-      field_3040226: formattedCep
+      field_3040217: formattedCep
     }));
 
     if (formattedCep.length === 9) {
@@ -78,10 +78,10 @@ export default function RestaurantForm() {
       if (data) {
         setFormData(prev => ({
           ...prev,
-          field_3040221: data.street || prev.field_3040221,
-          field_3040223: data.neighborhood || prev.field_3040223,
-          field_3040224: data.city || prev.field_3040224,
-          field_3040225: data.state || prev.field_3040225
+          field_3040211: data.street || prev.field_3040211,
+          field_3040213: data.neighborhood || prev.field_3040213,
+          field_3040215: data.city || prev.field_3040215,
+          field_3040216: data.state || prev.field_3040216
         }));
         toast.success('CEP encontrado!');
       }
@@ -101,11 +101,11 @@ export default function RestaurantForm() {
 
       // Atualiza o endereço completo antes de salvar
       const fullAddress = [
-        formData.field_3040221, // street
-        formData.field_3040222 && `nº ${formData.field_3040222}`, // number
-        formData.field_3040223, // neighborhood
-        formData.field_3040224, // city
-        formData.field_3040225 // state
+        formData.field_3040211, // street
+        formData.field_3040212 && `nº ${formData.field_3040212}`, // number
+        formData.field_3040213, // neighborhood
+        formData.field_3040215, // city
+        formData.field_3040216 // state
       ].filter(Boolean).join(', ');
 
       const dataToSave = {
@@ -159,14 +159,14 @@ export default function RestaurantForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="field_3040201" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="field_3040210" className="block text-sm font-medium text-gray-700">
             Nome
           </label>
           <input
             type="text"
-            id="field_3040201"
-            name="field_3040201"
-            value={formData.field_3040201 || ''}
+            id="field_3040210"
+            name="field_3040210"
+            value={formData.field_3040210 || ''}
             onChange={handleInputChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             required
@@ -175,15 +175,15 @@ export default function RestaurantForm() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="field_3040226" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="field_3040217" className="block text-sm font-medium text-gray-700">
               CEP
             </label>
             <div className="mt-1 flex rounded-md shadow-sm">
               <input
                 type="text"
-                id="field_3040226"
-                name="field_3040226"
-                value={formData.field_3040226 || ''}
+                id="field_3040217"
+                name="field_3040217"
+                value={formData.field_3040217 || ''}
                 onChange={handleCepChange}
                 maxLength={9}
                 placeholder="00000-000"
@@ -193,14 +193,14 @@ export default function RestaurantForm() {
           </div>
 
           <div>
-            <label htmlFor="field_3040222" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="field_3040212" className="block text-sm font-medium text-gray-700">
               Número
             </label>
             <input
               type="text"
-              id="field_3040222"
-              name="field_3040222"
-              value={formData.field_3040222 || ''}
+              id="field_3040212"
+              name="field_3040212"
+              value={formData.field_3040212 || ''}
               onChange={handleInputChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             />
@@ -208,28 +208,28 @@ export default function RestaurantForm() {
         </div>
 
         <div>
-          <label htmlFor="field_3040221" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="field_3040211" className="block text-sm font-medium text-gray-700">
             Rua
           </label>
           <input
             type="text"
-            id="field_3040221"
-            name="field_3040221"
-            value={formData.field_3040221 || ''}
+            id="field_3040211"
+            name="field_3040211"
+            value={formData.field_3040211 || ''}
             onChange={handleInputChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
           />
         </div>
 
         <div>
-          <label htmlFor="field_3040223" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="field_3040213" className="block text-sm font-medium text-gray-700">
             Bairro
           </label>
           <input
             type="text"
-            id="field_3040223"
-            name="field_3040223"
-            value={formData.field_3040223 || ''}
+            id="field_3040213"
+            name="field_3040213"
+            value={formData.field_3040213 || ''}
             onChange={handleInputChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
           />
@@ -237,28 +237,28 @@ export default function RestaurantForm() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="field_3040224" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="field_3040215" className="block text-sm font-medium text-gray-700">
               Cidade
             </label>
             <input
               type="text"
-              id="field_3040224"
-              name="field_3040224"
-              value={formData.field_3040224 || ''}
+              id="field_3040215"
+              name="field_3040215"
+              value={formData.field_3040215 || ''}
               onChange={handleInputChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             />
           </div>
 
           <div>
-            <label htmlFor="field_3040225" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="field_3040216" className="block text-sm font-medium text-gray-700">
               Estado
             </label>
             <input
               type="text"
-              id="field_3040225"
-              name="field_3040225"
-              value={formData.field_3040225 || ''}
+              id="field_3040216"
+              name="field_3040216"
+              value={formData.field_3040216 || ''}
               onChange={handleInputChange}
               maxLength={2}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"

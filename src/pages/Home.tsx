@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Package, Store, Clock, CheckCircle } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
-import { getRestaurants } from '../services/restaurantService';
+import { getActiveRestaurantsCount } from '../services/restaurantService';
 
 const stats = [
   { name: 'Entregas Hoje', value: '12', icon: Package, color: 'text-blue-600' },
@@ -39,19 +39,17 @@ export function Home() {
   const [activeRestaurants, setActiveRestaurants] = useState(0);
 
   useEffect(() => {
+    const loadActiveRestaurants = async () => {
+      try {
+        const count = await getActiveRestaurantsCount();
+        setActiveRestaurants(count);
+        stats[1].value = count.toString();
+      } catch (error) {
+        console.error('Error loading active restaurants count:', error);
+      }
+    };
     loadActiveRestaurants();
   }, []);
-
-  const loadActiveRestaurants = async () => {
-    try {
-      const restaurants = await getRestaurants();
-      const active = restaurants.filter(r => r.active).length;
-      setActiveRestaurants(active);
-      stats[1].value = active.toString();
-    } catch (error) {
-      console.error('Erro ao carregar restaurantes:', error);
-    }
-  };
 
   return (
     <div className="py-6">

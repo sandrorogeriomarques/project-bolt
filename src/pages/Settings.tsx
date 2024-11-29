@@ -1,16 +1,45 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useUserStore } from '../stores/userStore';
 import { toast } from 'react-hot-toast';
 import { Camera } from 'lucide-react';
 import { uploadImage } from '../services/upload';
-import axios from 'axios'; // Import axios
+import axios from 'axios';
 import { getAvatarUrl } from '../utils/getAvatarUrl';
+import { getRestaurants } from '../services/restaurantService';
+import { Restaurant } from '../types';
+import { getUserPreferences, createUserPreferences, updateUserPreferences } from '../services/userPreferencesService';
 
 export function Settings() {
   const { user, updateUser } = useUserStore();
   const [name, setName] = useState(user?.name || '');
   const [isLoading, setIsLoading] = useState(false);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<number | undefined>(user?.restaurantId);
+  const [userPreferencesId, setUserPreferencesId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Carregar restaurantes
+        const restaurantsData = await getRestaurants();
+        setRestaurants(restaurantsData);
+
+        // Carregar preferências do usuário
+        if (user?.id) {
+          const preferences = await getUserPreferences(user.id);
+          if (preferences) {
+            setUserPreferencesId(preferences.id);
+            setSelectedRestaurant(preferences.field_3040270);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+        toast.error('Erro ao carregar dados');
+      }
+    };
+    loadData();
+  }, [user?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +47,25 @@ export function Settings() {
 
     try {
       setIsLoading(true);
-      await updateUser({ name });
+      
+      // Atualizar usuário
+      await updateUser({ name, restaurantId: selectedRestaurant });
+
+      // Atualizar ou criar preferências do usuário
+      if (selectedRestaurant) {
+        const preferencesData = {
+          field_3040269: user.id, // user_id
+          field_3040270: selectedRestaurant, // selected_restaurant_id
+        };
+
+        if (userPreferencesId) {
+          await updateUserPreferences(userPreferencesId, preferencesData);
+        } else {
+          const newPreferences = await createUserPreferences(preferencesData);
+          setUserPreferencesId(newPreferences.id);
+        }
+      }
+
       toast.success('Configurações atualizadas com sucesso!');
     } catch (error) {
       console.error('Error updating settings:', error);
@@ -109,7 +156,7 @@ export function Settings() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
         <p className="text-gray-600">Gerencie suas informações pessoais</p>
@@ -160,9 +207,28 @@ export function Settings() {
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             />
+          </div>
+
+          {/* Restaurante */}
+          <div>
+            <label htmlFor="restaurant" className="block text-sm font-medium text-gray-700">
+              Restaurante
+            </label>
+            <select
+              id="restaurant"
+              value={selectedRestaurant}
+              onChange={(e) => setSelectedRestaurant(Number(e.target.value))}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+            >
+              <option value="">Selecione um restaurante</option>
+              {restaurants.map((restaurant) => (
+                <option key={restaurant.id} value={restaurant.id}>
+                  {restaurant.field_3040210}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* WhatsApp (somente leitura) */}

@@ -7,6 +7,7 @@ interface BaserowUpdates {
   field_3040201?: string; // Nome
   field_3016950?: string; // Avatar - Campo correto do Baserow
   field_3040203?: string; // WhatsApp
+  field_3040204?: number; // Restaurant ID
 }
 
 interface UserState {
@@ -54,6 +55,9 @@ export const useUserStore = create<UserState>()(
           }
           if (updates.whatsapp !== undefined) {
             baserowUpdates.field_3040203 = updates.whatsapp;
+          }
+          if (updates.restaurantId !== undefined) {
+            baserowUpdates.field_3040204 = updates.restaurantId;
           }
 
           console.log('Dados formatados para Baserow:', baserowUpdates);

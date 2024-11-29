@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 export default function Restaurants() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [restaurantData, setRestaurantData] = useState<Record<number, Restaurant>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,8 +22,15 @@ export default function Restaurants() {
       setLoading(true);
       setError(null);
       const data = await getRestaurants();
-      console.log('Restaurants data:', data); // Debug log
+      console.log('Restaurants data:', data);
       setRestaurants(data);
+      
+      // Armazena os dados de cada restaurante
+      const restaurantMap = data.reduce((acc, restaurant) => {
+        acc[restaurant.id] = restaurant;
+        return acc;
+      }, {} as Record<number, Restaurant>);
+      setRestaurantData(restaurantMap);
     } catch (err) {
       console.error('Error loading restaurants:', err);
       setError('Erro ao carregar restaurantes');
@@ -34,6 +42,14 @@ export default function Restaurants() {
 
   const handleToggleStatus = async (restaurant: Restaurant) => {
     try {
+      // Se estamos desativando, guarda os dados atuais
+      if (restaurant.field_3040220) {
+        setRestaurantData(prev => ({
+          ...prev,
+          [restaurant.id]: restaurant
+        }));
+      }
+      
       await updateRestaurant(restaurant.id, { field_3040220: !restaurant.field_3040220 });
       toast.success('Status atualizado com sucesso');
       await loadRestaurants();
@@ -43,9 +59,25 @@ export default function Restaurants() {
     }
   };
 
+  const getRestaurantDisplay = (restaurant: Restaurant) => {
+    // Se o restaurante está inativo, usa os dados armazenados
+    if (!restaurant.field_3040220 && restaurantData[restaurant.id]) {
+      const storedData = restaurantData[restaurant.id];
+      return {
+        name: storedData.field_3040210 || 'Sem nome',
+        address: storedData.field_3040218 || 'Sem endereço'
+      };
+    }
+    
+    return {
+      name: restaurant.field_3040210 || 'Sem nome',
+      address: restaurant.field_3040218 || 'Sem endereço'
+    };
+  };
+
   const filteredRestaurants = restaurants.filter(restaurant => {
     const matchesSearch = 
-      restaurant.field_3040201?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      restaurant.field_3040210?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       restaurant.field_3040218?.toLowerCase().includes(searchTerm.toLowerCase());
 
     if (showActive === null) return matchesSearch;
@@ -181,42 +213,45 @@ export default function Restaurants() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white">
-                        {filteredRestaurants.map((restaurant) => (
-                          <tr key={restaurant.id}>
-                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                              {restaurant.field_3040201 || 'Sem nome'}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                              {restaurant.field_3040218 || 'Sem endereço'}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                              <button
-                                onClick={() => handleToggleStatus(restaurant)}
-                                className={`inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium ${
-                                  restaurant.field_3040220
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-red-100 text-red-800'
-                                }`}
-                              >
-                                {restaurant.field_3040220 ? (
-                                  <CheckCircle className="w-4 h-4 mr-1" />
-                                ) : (
-                                  <XCircle className="w-4 h-4 mr-1" />
-                                )}
-                                {restaurant.field_3040220 ? 'Ativo' : 'Inativo'}
-                              </button>
-                            </td>
-                            <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                              <Link
-                                to={`/admin/restaurants/${restaurant.id}`}
-                                className="text-blue-600 hover:text-blue-900 inline-flex items-center"
-                              >
-                                <Edit2 className="w-4 h-4 mr-1" />
-                                Editar
-                              </Link>
-                            </td>
-                          </tr>
-                        ))}
+                        {filteredRestaurants.map((restaurant) => {
+                          const display = getRestaurantDisplay(restaurant);
+                          return (
+                            <tr key={restaurant.id}>
+                              <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                                {display.name}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                                {display.address}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                                <button
+                                  onClick={() => handleToggleStatus(restaurant)}
+                                  className={`inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium ${
+                                    restaurant.field_3040220
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}
+                                >
+                                  {restaurant.field_3040220 ? (
+                                    <CheckCircle className="w-4 h-4 mr-1" />
+                                  ) : (
+                                    <XCircle className="w-4 h-4 mr-1" />
+                                  )}
+                                  {restaurant.field_3040220 ? 'Ativo' : 'Inativo'}
+                                </button>
+                              </td>
+                              <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                                <Link
+                                  to={`/admin/restaurants/${restaurant.id}`}
+                                  className="text-blue-600 hover:text-blue-900 inline-flex items-center"
+                                >
+                                  <Edit2 className="w-4 h-4 mr-1" />
+                                  Editar
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
