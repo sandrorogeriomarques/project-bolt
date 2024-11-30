@@ -76,14 +76,14 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
   const geocodeAddress = async (address: string) => {
     try {
       console.log('Geocodificando endereço:', address);
-      
+
       // Adicionar 'Brasil' ao endereço para melhorar a precisão
       const fullAddress = `${address}, Brasil`;
-      
+
       const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
         fullAddress
       )}&key=${GOOGLE_MAPS_API_KEY}`;
-      
+
       const response = await axios.get(url);
       console.log('Resposta da API de Geocodificação:', response.data);
 
@@ -107,6 +107,33 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
     }
   };
 
+  // Função para calcular distância entre dois pontos usando a Matrix API
+  const getMatrixDistance = async (origin: RoutePoint, destination: RoutePoint): Promise<number> => {
+    try {
+      console.log('Chamando Matrix API com:', {
+        origin: `${origin.lat},${origin.lng}`,
+        destinations: `${destination.lat},${destination.lng}`
+      });
+
+      const response = await axios.post('/api/distance-matrix', {
+        origin: `${origin.lat},${origin.lng}`,
+        destinations: `${destination.lat},${destination.lng}`,
+        key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+      });
+
+      console.log('Resposta da Matrix API:', response.data);
+
+      if (response.data.status !== 'OK') {
+        throw new Error(`Erro na API do Google: ${response.data.status}`);
+      }
+
+      return response.data.rows[0].elements[0].distance.value;
+    } catch (error) {
+      console.error('Erro ao calcular distância:', error);
+      throw error;
+    }
+  };
+
   const getDirections = async (origin: RoutePoint, destination: RoutePoint): Promise<DirectionsResult> => {
     try {
       const response = await axios.post('/api/directions', {
@@ -125,8 +152,8 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
       
       return {
         points: polyline.decode(route.overview_polyline.points),
-        distance: leg.distance.value, // em metros
-        duration: leg.duration.value, // em segundos
+        distance: leg.distance.value,
+        duration: leg.duration.value,
         startAddress: leg.start_address,
         endAddress: leg.end_address
       };
@@ -179,7 +206,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
         console.log('Calculando rota para um único ponto');
         const routeResult = await getDirections(originPoint, points[0].point);
         newRoutes.push(routeResult.points);
-        
+
         // Adicionar informações da rota
         newRouteInfos.push({
           address: points[0].deliveryData.address,
@@ -196,14 +223,13 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
         // Criar array com todos os pontos na ordem original
         const allPoints = [originPoint, ...points.map(p => p.point)];
         
-        // Calcular todas as distâncias entre os pontos
+        // Calcular todas as distâncias entre os pontos usando a Matrix API
         const distances = await Promise.all(
           allPoints.map(async (point1) => {
             const results = await Promise.all(
               allPoints.map(async (point2) => {
                 if (point1 === point2) return 0;
-                const route = await getDirections(point1, point2);
-                return route.distance;
+                return await getMatrixDistance(point1, point2);
               })
             );
             return results;
@@ -211,60 +237,60 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
         );
         
         console.log('Matriz de distâncias calculada:', distances);
-        
+
         // Encontrar o ponto mais distante do restaurante
         const restaurantDistances = distances[0].slice(1); // Ignorar a distância do restaurante para ele mesmo
         const farthestIndex = findFarthestPointIndex(restaurantDistances);
         console.log('Índice do ponto mais distante:', farthestIndex);
-        
+
         // Começar com todos os pontos exceto o mais distante
         const orderedPoints: typeof points = [];
         const remainingPoints = [...points];
         const farthestPoint = remainingPoints.splice(farthestIndex, 1)[0];
-        
+
         // Começar do restaurante
         let currentPoint = originPoint;
         let currentPointIndex = 0;
-        
+
         // Adicionar os pontos na ordem do mais próximo para o mais distante
         while (remainingPoints.length > 0) {
           let nearestIndex = 0;
           let nearestDistance = Infinity;
-          
+
           for (let i = 0; i < remainingPoints.length; i++) {
             const point = remainingPoints[i].point;
             const pointIndex = allPoints.findIndex(p => p === point);
             const distance = distances[currentPointIndex][pointIndex];
-            
+
             if (distance < nearestDistance) {
               nearestDistance = distance;
               nearestIndex = i;
             }
           }
-          
+
           const nextPoint = remainingPoints.splice(nearestIndex, 1)[0];
           orderedPoints.push(nextPoint);
-          
+
           currentPoint = nextPoint.point;
           currentPointIndex = allPoints.findIndex(p => p === currentPoint);
         }
-        
+
         // Adicionar o ponto mais distante por último
         orderedPoints.push(farthestPoint);
-        
-        console.log('Ordem otimizada:', 
+
+        console.log('Ordem otimizada:',
           orderedPoints.map(p => ({
             address: p.deliveryData.address,
             coords: p.point
           }))
         );
-        
+
         // Calcular rotas na ordem otimizada
         let previousPoint = originPoint;
         for (const point of orderedPoints) {
           const routeResult = await getDirections(previousPoint, point.point);
           newRoutes.push(routeResult.points);
-          
+
           // Adicionar informações da rota
           newRouteInfos.push({
             address: point.deliveryData.address,
@@ -273,7 +299,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
           });
           deliveryDistance += routeResult.distance;
           deliveryDuration += routeResult.duration / 60;
-          
+
           previousPoint = point.point;
         }
       }
@@ -282,7 +308,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
       const lastPoint = points[points.length - 1].point;
       console.log('Calculando rota de retorno ao restaurante');
       const returnRouteResult = await getDirections(lastPoint, originPoint);
-      
+
       // Atualizar informações de retorno
       setReturnInfo({
         address: 'Retorno ao restaurante',
@@ -306,13 +332,13 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
       const now = new Date();
       const returnTime = new Date(now.getTime() + (totalDuration * 60 * 1000));
       setEstimatedReturn(
-        returnTime.toLocaleTimeString('pt-BR', { 
-          hour: '2-digit', 
+        returnTime.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
           minute: '2-digit',
-          hour12: false 
+          hour12: false
         })
       );
-      
+
       console.log('Rotas calculadas:', {
         deliveryRoutes: newRoutes,
         returnRoute: returnRouteResult,
@@ -350,15 +376,15 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
   // Função para calcular distância entre dois pontos em metros
   const getDistanceFromLatLonInMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const R = 6371e3; // Raio da Terra em metros
-    const φ1 = lat1 * Math.PI/180;
-    const φ2 = lat2 * Math.PI/180;
-    const Δφ = (lat2-lat1) * Math.PI/180;
-    const Δλ = (lon2-lon1) * Math.PI/180;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
     return R * c;
   };
@@ -438,10 +464,10 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          
+
           {/* Marcador do restaurante */}
           {origin && (
-            <Marker 
+            <Marker
               position={[origin.lat, origin.lng]}
               ref={ref => {
                 if (ref) {
@@ -461,7 +487,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
             if (routes[index] && routes[index].length > 0) {
               const lastPoint = routes[index][routes[index].length - 1];
               return (
-                <Marker 
+                <Marker
                   key={`delivery-${index}`}
                   position={[lastPoint[0], lastPoint[1]]}
                   ref={ref => {
@@ -521,7 +547,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
       {routeInfos.length > 0 && (
         <div className="mt-4 p-6 bg-white rounded-lg shadow">
           <h3 className="text-xl font-semibold mb-4">Rota otimizada</h3>
-          
+
           <div className="space-y-3 font-mono">
             {/* Cabeçalho */}
             <div className="flex text-gray-600 text-sm border-b pb-2">
@@ -529,7 +555,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
               <span className="w-24 text-right">Distância</span>
               <span className="w-20 text-right ml-4">Tempo</span>
             </div>
-            
+
             {/* Pontos de entrega */}
             {routeInfos.map((info, index) => (
               <div key={index} className="flex items-center">
@@ -544,7 +570,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
                 </span>
               </div>
             ))}
-            
+
             {/* Retorno */}
             {returnInfo && (
               <div className="flex items-center text-gray-600">
@@ -557,7 +583,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
                 </span>
               </div>
             )}
-            
+
             {/* Linha divisória */}
             <div className="border-t border-gray-300 my-2">
               <div className="flex justify-between text-xs text-gray-400 px-12">
@@ -568,7 +594,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
                 <span>-</span>
               </div>
             </div>
-            
+
             {/* Total */}
             {totalInfo && (
               <div className="flex items-center font-semibold">
@@ -581,7 +607,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
                 </span>
               </div>
             )}
-            
+
             {/* Horário de retorno */}
             {estimatedReturn && (
               <div className="mt-4 text-right text-gray-600">
