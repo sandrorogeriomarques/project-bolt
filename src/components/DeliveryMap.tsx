@@ -5,6 +5,8 @@ import L from 'leaflet';
 import axios from 'axios';
 import polyline from '@mapbox/polyline';
 import { matrixCacheService } from '../services/matrixCacheService';
+import { getRestaurantCoordinates } from '../services/restaurantService';
+import { baserowApi } from '../services/baserowApi';
 
 // Importar ícones do Leaflet
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
@@ -32,6 +34,7 @@ interface DeliveryPoint {
 }
 
 interface DeliveryMapProps {
+  restaurantId: string;
   restaurantAddress: string;
   deliveryPoints: DeliveryPoint[];
 }
@@ -55,7 +58,7 @@ interface DirectionsResult {
   endAddress: string;
 }
 
-export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapProps) {
+export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }: DeliveryMapProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [routes, setRoutes] = useState<DirectionsResult[]>([]);
@@ -148,20 +151,54 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
     }
   };
 
+  // Função para buscar coordenadas do restaurante do banco
+  const getRestaurantCoordinates = async (restaurantId: string) => {
+    try {
+      const response = await baserowApi.get(
+        `/database/rows/table/${import.meta.env.VITE_BASEROW_RESTAURANTS_TABLE_ID}/${restaurantId}/`,
+        {
+          headers: {
+            'Authorization': `Token ${import.meta.env.VITE_BASEROW_TOKEN}`
+          }
+        }
+      );
+
+      if (response.data && response.data.field_3040219) {
+        const [lat, lng] = response.data.field_3040219.split(',').map(Number);
+        return { lat, lng };
+      }
+      throw new Error('Coordenadas do restaurante não encontradas');
+    } catch (error) {
+      console.error('Erro ao buscar coordenadas do restaurante:', error);
+      throw error;
+    }
+  };
+
   // Função para geocodificar todos os endereços
   const geocodeAllAddresses = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Geocodificar restaurante
-      console.log('Geocodificando restaurante:', restaurantAddress);
-      const restaurantPoint = await geocodeAddress(formatRestaurantAddress(restaurantAddress));
-      setRestaurantCoords(restaurantPoint);
+      // Buscar coordenadas do restaurante do banco
+      const restaurantPoint = await getRestaurantCoordinates(restaurantId);
+      if (!restaurantPoint) {
+        // Se não houver coordenadas no banco, geocodificar o endereço
+        const formattedAddress = formatRestaurantAddress(restaurantAddress);
+        const coords = await geocodeAddress(formattedAddress);
+        setRestaurantCoords(coords);
+      } else {
+        setRestaurantCoords(restaurantPoint);
+      }
 
       // Geocodificar pontos de entrega
       const points = await Promise.all(
         deliveryPoints.map(async (point) => {
+          if (point.coordinates) {
+            // Se já tiver coordenadas, usar diretamente
+            return { point: point.coordinates, id: point.id };
+          }
+          // Se não tiver coordenadas, geocodificar
           const address = formatDeliveryAddress(point);
           const coords = await geocodeAddress(address);
           return { point: coords, id: point.id };
@@ -180,85 +217,118 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
 
   // Função para calcular distância entre dois pontos usando a Matrix API
   const getMatrixDistance = async (origin: RoutePoint, destination: RoutePoint): Promise<number> => {
-    try {
-      const originStr = `${origin.lat},${origin.lng}`;
-      const destinationStr = `${destination.lat},${destination.lng}`;
+    const retryCount = 3;
+    const retryDelay = 1000; // 1 segundo
 
-      // Tentar buscar do cache primeiro
-      const cachedResult = await matrixCacheService.getCachedDistance(originStr, destinationStr);
-      if (cachedResult) {
-        console.log('Usando distância do cache:', cachedResult);
-        return cachedResult.field_3040303;
+    for (let attempt = 1; attempt <= retryCount; attempt++) {
+      try {
+        const originStr = `${origin.lat},${origin.lng}`;
+        const destinationStr = `${destination.lat},${destination.lng}`;
+
+        // Tentar buscar do cache primeiro
+        const cachedResult = await matrixCacheService.getCachedDistance(originStr, destinationStr);
+        if (cachedResult) {
+          console.log('Usando distância do cache:', cachedResult);
+          return cachedResult.field_3040303;
+        }
+
+        // Configurar URL base do axios
+        const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
+        const response = await axios.post(`${baseURL}/api/distance-matrix`, {
+          origin: originStr,
+          destinations: destinationStr,
+          key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+        });
+
+        if (!response.data || response.data.status !== 'OK') {
+          throw new Error(`Erro na API do Google: ${response.data?.status || 'Resposta inválida'}`);
+        }
+
+        const element = response.data.rows[0]?.elements[0];
+        if (!element || element.status !== 'OK') {
+          throw new Error(`Elemento da matriz inválido: ${element?.status || 'Não encontrado'}`);
+        }
+
+        const distance = element.distance.value;
+        const duration = element.duration.value;
+
+        // Salvar no cache
+        await matrixCacheService.cacheDistance(
+          originStr,
+          destinationStr,
+          distance,
+          duration
+        );
+
+        return distance;
+      } catch (error) {
+        console.error(`Tentativa ${attempt} falhou:`, error);
+        
+        if (attempt === retryCount) {
+          throw new Error(`Falha ao calcular distância após ${retryCount} tentativas: ${error.message}`);
+        }
+        
+        // Esperar antes de tentar novamente
+        await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
       }
-
-      console.log('Chamando Matrix API com:', {
-        origin: originStr,
-        destinations: destinationStr
-      });
-
-      // Configurar URL base do axios
-      const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
-      const response = await axios.post(`${baseURL}/api/distance-matrix`, {
-        origin: originStr,
-        destinations: destinationStr,
-        key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-      });
-
-      console.log('Resposta da Matrix API:', response.data);
-
-      if (response.data.status !== 'OK') {
-        throw new Error(`Erro na API do Google: ${response.data.status}`);
-      }
-
-      const distance = response.data.rows[0].elements[0].distance.value;
-      const duration = response.data.rows[0].elements[0].duration.value;
-
-      // Salvar no cache
-      await matrixCacheService.cacheDistance(
-        originStr,
-        destinationStr,
-        distance,
-        duration
-      );
-
-      return distance;
-    } catch (error) {
-      console.error('Erro ao calcular distância:', error);
-      throw error;
     }
+
+    throw new Error('Erro inesperado no cálculo de distância');
   };
 
   const getDirections = async (origin: RoutePoint, destination: RoutePoint): Promise<DirectionsResult> => {
-    try {
-      // Configurar URL base do axios
-      const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
-      const response = await axios.post(`${baseURL}/api/directions`, {
-        origin: `${origin.lat},${origin.lng}`,
-        destination: `${destination.lat},${destination.lng}`,
-        key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-      });
+    const retryCount = 3;
+    const retryDelay = 1000;
 
-      if (response.data.status !== 'OK') {
-        throw new Error(`Erro na API do Google: ${response.data.status}`);
+    for (let attempt = 1; attempt <= retryCount; attempt++) {
+      try {
+        const originStr = `${origin.lat},${origin.lng}`;
+        const destinationStr = `${destination.lat},${destination.lng}`;
+
+        // Configurar URL base do axios
+        const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
+        const response = await axios.post(`${baseURL}/api/directions`, {
+          origin: originStr,
+          destination: destinationStr,
+          key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+        });
+
+        if (!response.data || response.data.status !== 'OK') {
+          throw new Error(`Erro na API do Google: ${response.data?.status || 'Resposta inválida'}`);
+        }
+
+        const route = response.data.routes[0];
+        if (!route) {
+          throw new Error('Nenhuma rota encontrada');
+        }
+
+        const leg = route.legs[0];
+        if (!leg) {
+          throw new Error('Dados da rota incompletos');
+        }
+
+        return {
+          points: polyline.decode(route.overview_polyline.points),
+          distance: leg.distance.value,
+          duration: leg.duration.value,
+          startAddress: leg.start_address,
+          endAddress: leg.end_address
+        };
+      } catch (error) {
+        console.error(`Tentativa ${attempt} falhou:`, error);
+        
+        if (attempt === retryCount) {
+          throw new Error(`Falha ao obter direções após ${retryCount} tentativas: ${error.message}`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
       }
-
-      // Extrair informações da rota
-      const route = response.data.routes[0];
-      const leg = route.legs[0];
-      
-      return {
-        points: polyline.decode(route.overview_polyline.points),
-        distance: leg.distance.value,
-        duration: leg.duration.value,
-        startAddress: leg.start_address,
-        endAddress: leg.end_address
-      };
-    } catch (error) {
-      console.error('Erro ao obter direções:', error);
-      throw error;
     }
+
+    throw new Error('Erro inesperado ao obter direções');
   };
 
+  // Função para otimizar ordem dos pontos de entrega
   const optimizeDeliveryOrder = async (
     restaurantPoint: RoutePoint,
     deliveryPoints: Array<{ point: RoutePoint; id: string }>

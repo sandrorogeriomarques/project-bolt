@@ -283,17 +283,23 @@ export function Deliveries() {
       )}
 
       {showMap && selectedRestaurant && (
-        <div className="mb-6">
+        <div className="mt-4">
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">
               Rota de Entrega
             </h2>
             <DeliveryMap
+              restaurantId={selectedRestaurant.id.toString()}
               restaurantAddress={selectedRestaurant.field_3040218}
-              deliveryPoints={deliveries.map(d => ({
-                address: `${d.street}, ${d.number}, ${d.neighborhood}, ${d.city}, ${selectedRestaurant.field_3040216}`,
-                customerName: d.customerName,
-                id: d.id
+              deliveryPoints={deliveries.map(delivery => ({
+                id: delivery.id,
+                customerName: delivery.customerName,
+                street: delivery.street,
+                number: delivery.number,
+                neighborhood: delivery.neighborhood,
+                city: delivery.city,
+                state: delivery.state,
+                address: delivery.fullAddress
               }))}
             />
             <div className="mt-6 flex justify-end gap-4">

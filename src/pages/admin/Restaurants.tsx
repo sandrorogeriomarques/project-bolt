@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit2, CheckCircle, XCircle } from 'lucide-react';
-import { getRestaurants, updateRestaurant } from '../../services/restaurantService';
+import { Plus, Search, Edit2, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { getRestaurants, updateRestaurant, deleteRestaurant } from '../../services/restaurantService';
 import { Restaurant } from '../../types';
 import toast from 'react-hot-toast';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 export default function Restaurants() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -12,6 +13,16 @@ export default function Restaurants() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showActive, setShowActive] = useState<boolean | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    restaurantId: number | null;
+    restaurantName: string;
+  }>({
+    isOpen: false,
+    restaurantId: null,
+    restaurantName: ''
+  });
 
   useEffect(() => {
     loadRestaurants();
@@ -83,6 +94,36 @@ export default function Restaurants() {
     if (showActive === null) return matchesSearch;
     return matchesSearch && restaurant.field_3040220 === showActive;
   });
+
+  const openConfirmDialog = (restaurant: Restaurant) => {
+    setConfirmDialog({
+      isOpen: true,
+      restaurantId: restaurant.id,
+      restaurantName: restaurant.field_3040210 || 'este restaurante'
+    });
+  };
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog({
+      isOpen: false,
+      restaurantId: null,
+      restaurantName: ''
+    });
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      setDeletingId(id);
+      await deleteRestaurant(id);
+      toast.success('Restaurante excluído com sucesso');
+      await loadRestaurants();
+    } catch (err) {
+      console.error('Erro ao excluir restaurante:', err);
+      toast.error('Erro ao excluir restaurante');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -198,7 +239,7 @@ export default function Restaurants() {
                     <table className="min-w-full divide-y divide-gray-300">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
+                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                             Nome
                           </th>
                           <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
@@ -217,7 +258,7 @@ export default function Restaurants() {
                           const display = getRestaurantDisplay(restaurant);
                           return (
                             <tr key={restaurant.id}>
-                              <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                              <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                 {display.name}
                               </td>
                               <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
@@ -226,28 +267,40 @@ export default function Restaurants() {
                               <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                 <button
                                   onClick={() => handleToggleStatus(restaurant)}
-                                  className={`inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium ${
+                                  className={`inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded ${
                                     restaurant.field_3040220
-                                      ? 'bg-green-100 text-green-800'
-                                      : 'bg-red-100 text-red-800'
+                                      ? 'text-green-700 bg-green-100 hover:bg-green-200'
+                                      : 'text-red-700 bg-red-100 hover:bg-red-200'
                                   }`}
                                 >
                                   {restaurant.field_3040220 ? (
-                                    <CheckCircle className="w-4 h-4 mr-1" />
+                                    <CheckCircle className="h-4 w-4 mr-1" />
                                   ) : (
-                                    <XCircle className="w-4 h-4 mr-1" />
+                                    <XCircle className="h-4 w-4 mr-1" />
                                   )}
                                   {restaurant.field_3040220 ? 'Ativo' : 'Inativo'}
                                 </button>
                               </td>
                               <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                                <Link
-                                  to={`/admin/restaurants/${restaurant.id}`}
-                                  className="text-blue-600 hover:text-blue-900 inline-flex items-center"
-                                >
-                                  <Edit2 className="w-4 h-4 mr-1" />
-                                  Editar
-                                </Link>
+                                <div className="flex justify-end gap-2">
+                                  <Link
+                                    to={`/admin/restaurants/${restaurant.id}/edit`}
+                                    className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-gray-100"
+                                    title="Editar restaurante"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Link>
+                                  <button
+                                    onClick={() => openConfirmDialog(restaurant)}
+                                    disabled={deletingId === restaurant.id}
+                                    className={`text-red-600 hover:text-red-900 p-1 rounded hover:bg-gray-100 ${
+                                      deletingId === restaurant.id ? 'opacity-50 cursor-not-allowed' : ''
+                                    }`}
+                                    title="Excluir restaurante"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -261,6 +314,19 @@ export default function Restaurants() {
           )}
         </div>
       </div>
+      {/* Modal de confirmação */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={closeConfirmDialog}
+        onConfirm={() => {
+          if (confirmDialog.restaurantId) {
+            handleDelete(confirmDialog.restaurantId);
+          }
+          closeConfirmDialog();
+        }}
+        title="Confirmar exclusão"
+        message={`Tem certeza que deseja excluir ${confirmDialog.restaurantName}? Esta ação não pode ser desfeita.`}
+      />
     </div>
   );
 }

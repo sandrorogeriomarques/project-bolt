@@ -90,7 +90,7 @@ function App() {
               </div>
             </ProtectedRoute>
           } />
-          <Route path="/admin/restaurants/:id" element={
+          <Route path="/admin/restaurants/:id/edit" element={
             <ProtectedRoute>
               <div className="min-h-screen bg-gray-50">
                 <Navigation />

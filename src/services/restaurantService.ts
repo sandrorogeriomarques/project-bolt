@@ -114,12 +114,21 @@ export async function createRestaurant(data: Partial<Restaurant>): Promise<Resta
     return response.data;
   } catch (error) {
     console.error('Erro ao criar restaurante:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Detalhes do erro:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+    }
     throw error;
   }
 }
 
 export async function updateRestaurant(id: number, data: Partial<Restaurant>): Promise<Restaurant> {
   try {
+    console.log('Updating restaurant with data:', { id, data }); // Debug log
+    
     // Se estamos apenas atualizando o status
     if (Object.keys(data).length === 1 && 'field_3040220' in data) {
       // Busca os dados atuais do restaurante
@@ -139,24 +148,34 @@ export async function updateRestaurant(id: number, data: Partial<Restaurant>): P
         field_3040220: data.field_3040220
       };
       
-      console.log('Atualizando restaurante com dados:', updatedData);
       const response = await baserowApi.patch(`/database/rows/table/${RESTAURANTS_TABLE_ID}/${id}/`, updatedData);
-      console.log('API Response (updateRestaurant):', response.data);
-      
-      // Retorna os dados originais com o novo status
-      return {
-        ...currentRestaurant,
-        field_3040220: data.field_3040220
-      };
+      console.log('API Response (updateRestaurant - status only):', response.data); // Debug log
+      return response.data;
     }
     
-    // Para outras atualizações
-    console.log('Atualizando restaurante com dados:', data);
-    const response = await baserowApi.patch(`/database/rows/table/${RESTAURANTS_TABLE_ID}/${id}/`, data);
-    console.log('API Response (updateRestaurant):', response.data);
+    const response = await baserowApi.patch(`/database/rows/table/${RESTAURANTS_TABLE_ID}/${id}/`, {
+      field_3040210: data.field_3040210 || '', // name
+      field_3040211: data.field_3040211 || '', // street
+      field_3040212: data.field_3040212 || '', // number
+      field_3040213: data.field_3040213 || '', // neighborhood
+      field_3040215: data.field_3040215 || '', // city
+      field_3040216: data.field_3040216 || '', // state
+      field_3040217: data.field_3040217 || '', // postal_code
+      field_3040218: data.field_3040218 || '', // full_address
+      field_3040219: data.field_3040219 || '', // coordinates
+      field_3040220: data.field_3040220 ?? true, // active
+    });
+    console.log('API Response (updateRestaurant):', response.data); // Debug log
     return response.data;
   } catch (error) {
     console.error('Erro ao atualizar restaurante:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Detalhes do erro:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+    }
     throw error;
   }
 }
@@ -182,5 +201,34 @@ export const getActiveRestaurantsCount = async (): Promise<number> => {
   } catch (error) {
     console.error('Error getting active restaurants count:', error);
     return 0;
+  }
+};
+
+export const getRestaurantCoordinates = async (restaurantId: string): Promise<{ lat: number; lng: number } | null> => {
+  try {
+    const response = await baserowApi.get(
+      `${import.meta.env.VITE_BASEROW_API_URL}/database/rows/table/${import.meta.env.VITE_BASEROW_RESTAURANTS_TABLE_ID}/${restaurantId}/`,
+      {
+        headers: {
+          'Authorization': `Token ${import.meta.env.VITE_BASEROW_TOKEN}`
+        }
+      }
+    );
+
+    if (response.data && response.data.field_3040219) {
+      const [lat, lng] = response.data.field_3040219.split(',').map(Number);
+      return { lat, lng };
+    }
+    
+    // Se não houver coordenadas, mas houver endereço completo
+    if (response.data && response.data.field_3040218) {
+      // Retornar null para indicar que precisa geocodificar
+      return null;
+    }
+    
+    throw new Error('Dados do restaurante não encontrados');
+  } catch (error) {
+    console.error('Erro ao buscar dados do restaurante:', error);
+    throw error;
   }
 };
