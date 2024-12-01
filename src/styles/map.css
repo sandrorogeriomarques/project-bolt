@@ -1,0 +1,50 @@
+.map-container {
+  position: relative;
+  z-index: 0;
+}
+
+.leaflet-container {
+  z-index: 0;
+}
+
+/* Ajustando z-index dos controles */
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 390 !important;
+}
+
+.leaflet-control-container {
+  z-index: 390 !important;
+}
+
+/* Garantindo que os popups apareçam acima dos controles */
+.leaflet-popup {
+  z-index: 391 !important;
+}
+
+/* Ajustando z-index das camadas do mapa */
+.leaflet-map-pane {
+  z-index: 0 !important;
+}
+
+.leaflet-tile-pane {
+  z-index: 0 !important;
+}
+
+.leaflet-overlay-pane {
+  z-index: 0 !important;
+}
+
+.leaflet-marker-pane {
+  z-index: 390 !important;
+}
+
+/* Garantindo que o loading overlay fique acima do mapa */
+.map-loading-overlay {
+  z-index: 1000;
+}
+
+/* Estilo para o ícone do restaurante */
+.restaurant-marker {
+  filter: hue-rotate(150deg) saturate(1.5);
+}

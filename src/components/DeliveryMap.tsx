@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import '../styles/map.css';
 import L from 'leaflet';
 import axios from 'axios';
 import polyline from '@mapbox/polyline';
@@ -56,6 +57,23 @@ interface DirectionsResult {
   duration: number;
   startAddress: string;
   endAddress: string;
+}
+
+// Componente para ajustar o zoom automaticamente
+function AutoZoom({ points }: { points: Array<[number, number]> }) {
+  const map = useMap();
+  
+  useEffect(() => {
+    if (points.length > 0) {
+      const bounds = L.latLngBounds(points);
+      map.fitBounds(bounds, { 
+        padding: [50, 50],
+        maxZoom: 15
+      });
+    }
+  }, [points, map]);
+
+  return null;
 }
 
 export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }: DeliveryMapProps) {
@@ -116,6 +134,74 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
     }
   };
 
+  // Função para capitalizar nome do cliente
+  const capitalizeCustomerName = (name: string): string => {
+    return name
+      .toLowerCase()
+      .split(' ')
+      .map(word => {
+        // Não capitaliza artigos e preposições
+        const minorWords = ['de', 'da', 'do', 'das', 'dos', 'e'];
+        return minorWords.includes(word) ? word : word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(' ');
+  };
+
+  // Função para formatar endereço da API
+  const formatApiAddress = (result: any): string => {
+    try {
+      if (!result || !result.formatted_address) {
+        throw new Error('Resultado da API inválido');
+      }
+
+      // Pega o endereço completo
+      let address = result.formatted_address;
+
+      // Remove o Brasil do final
+      address = address.replace(/,?\s*Brasil$/i, '');
+
+      // Remove CEPs no formato XXXXX-XXX ou XXXXXXXX
+      address = address.replace(/,?\s*\d{5}-?\d{0,3}/g, '');
+
+      // Limpa espaços e vírgulas extras
+      address = address.split(',')
+        .map(part => part.trim())
+        .filter(part => part && !part.match(/^(Brasil|PR)$/)) // Remove partes que são apenas Brasil ou PR
+        .join(', ');
+
+      // Remove espaços duplicados
+      address = address.replace(/\s+/g, ' ').trim();
+
+      return address;
+    } catch (error) {
+      console.error('Erro ao formatar endereço da API:', error);
+      return 'Endereço indisponível';
+    }
+  };
+
+  // Função para formatar endereço para exibição
+  const formatDisplayAddress = (address: string): string => {
+    if (!address) return 'Endereço indisponível';
+    
+    // Remove o Brasil do final
+    let formattedAddress = address.replace(/,?\s*Brasil$/i, '');
+    
+    // Remove CEPs no formato XXXXX-XXX ou XXXXXXXX
+    formattedAddress = formattedAddress.replace(/,?\s*\d{5}-?\d{0,3}/g, '');
+    
+    // Remove PR do final se estiver sozinho
+    formattedAddress = formattedAddress.replace(/,\s*PR$/i, '');
+    
+    // Limpa vírgulas e espaços extras
+    formattedAddress = formattedAddress
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .join(', ');
+    
+    return formattedAddress;
+  };
+
   // Função para geocodificar um endereço
   const geocodeAddress = async (address: string) => {
     console.log('Geocodificando endereço:', address);
@@ -140,7 +226,8 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         console.log('Coordenadas encontradas para', address, ':', location);
         return {
           lat: location.lat,
-          lng: location.lng
+          lng: location.lng,
+          formattedAddress: formatApiAddress(response.data.results[0])
         };
       }
 
@@ -441,7 +528,7 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         if (!deliveryPoint) continue;
 
         infos.push({
-          address: formatDeliveryAddress(deliveryPoint),
+          address: result.endAddress, // Usando o endereço formatado da API
           distance: result.distance,
           duration: result.duration
         });
@@ -487,6 +574,28 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
     }
   };
 
+  // Função para obter todos os pontos da rota
+  const getAllRoutePoints = (): Array<[number, number]> => {
+    const allPoints: Array<[number, number]> = [];
+    
+    // Adicionar ponto do restaurante
+    if (restaurantCoords) {
+      allPoints.push([restaurantCoords.lat, restaurantCoords.lng]);
+    }
+    
+    // Adicionar pontos das rotas
+    routes.forEach(route => {
+      allPoints.push(...route.points);
+    });
+    
+    // Adicionar pontos da rota de retorno
+    if (returnRoute) {
+      allPoints.push(...returnRoute.points);
+    }
+    
+    return allPoints;
+  };
+
   useEffect(() => {
     if (restaurantAddress && deliveryPoints.length > 0) {
       geocodeAllAddresses();
@@ -512,6 +621,11 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
     return () => clearTimeout(timer);
   }, [restaurantCoords, deliveryCoords]);
 
+  // Configuração do ícone do restaurante (vermelho)
+  const restaurantIcon = new L.Icon.Default({
+    className: 'restaurant-marker', // Classe CSS para colorir o ícone
+  });
+
   if (loading) {
     return <div>Carregando mapa...</div>;
   }
@@ -525,17 +639,21 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="relative">
+    <div className="space-y-4">
+      <div className="relative h-[600px] rounded-lg overflow-hidden map-container">
         <MapContainer
-          center={[restaurantCoords.lat, restaurantCoords.lng]}
-          zoom={13}
-          style={{ height: "400px", width: "100%" }}
+          center={[-25.4284, -49.2733]}
+          zoom={12}
+          style={{ height: '100%', width: '100%' }}
+          className="z-0"
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+
+          {/* Componente de zoom automático */}
+          <AutoZoom points={getAllRoutePoints()} />
 
           {/* Marcador do restaurante */}
           {restaurantCoords && (
@@ -546,10 +664,17 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
                   markerRefs.current[0] = ref;
                 }
               }}
+              icon={new L.Icon.Default({
+                className: 'restaurant-marker' // Aplica o filtro CSS para mudar a cor
+              })}
             >
               <Popup>
-                <div className="font-semibold text-lg text-blue-700 mb-1">Coleta</div>
-                <div className="text-gray-600">{restaurantAddress}</div>
+                <div className="font-semibold text-lg text-blue-700 mb-1">
+                  Restaurante
+                </div>
+                <div className="text-gray-600 text-sm">
+                  {formatDisplayAddress(restaurantAddress)}
+                </div>
               </Popup>
             </Marker>
           )}
@@ -558,8 +683,9 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
           {optimizedOrder.map((pointId, index) => {
             const coords = deliveryCoords.find(p => p.id === pointId)?.point;
             const deliveryPoint = deliveryPoints.find(p => p.id === pointId);
+            const routeInfo = routeInfos[index];
             
-            if (!coords || !deliveryPoint) return null;
+            if (!coords || !deliveryPoint || !routeInfo) return null;
 
             return (
               <Marker
@@ -576,13 +702,13 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
                     Entrega {index + 1}
                   </div>
                   <div className="text-gray-700 font-medium mb-1">
-                    {deliveryPoint.customerName}
+                    {capitalizeCustomerName(deliveryPoint.customerName)}
                   </div>
                   <div className="text-gray-600 text-sm">
-                    {formatDeliveryAddress(deliveryPoint)}
+                    {formatDisplayAddress(routeInfo.address)}
                   </div>
                   <div className="text-gray-500 text-xs mt-2">
-                    {(routeInfos[index].distance / 1000).toFixed(1)} km • {Math.round(routeInfos[index].duration)} min
+                    {(routeInfo.distance / 1000).toFixed(1)} km • {Math.round(routeInfo.duration)} min
                   </div>
                 </Popup>
               </Marker>
@@ -613,7 +739,7 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
 
         {/* Loading overlay */}
         {loading && (
-          <div className="absolute inset-0 bg-white/50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-white/50 flex items-center justify-center map-loading-overlay">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
           </div>
         )}
@@ -651,13 +777,13 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
               return (
                 <div key={pointId} className="flex items-center text-sm">
                   <span className="w-8">{index + 1}</span>
-                  <span className="flex-1">{deliveryPoint.customerName}</span>
-                  <span className="flex-1">{info.address}</span>
+                  <span className="flex-1">{capitalizeCustomerName(deliveryPoint.customerName)}</span>
+                  <span className="flex-1">{formatDisplayAddress(info.address)}</span>
                   <span className="w-24 text-right">
                     {info.distance ? `${(info.distance / 1000).toFixed(1)} km` : 'N/A'}
                   </span>
                   <span className="w-20 text-right ml-4">
-                    {info.duration ? `${Math.round(info.duration / 60)} min` : 'N/A'}
+                    {info.duration ? `${Math.round(info.duration)} min` : 'N/A'}
                   </span>
                 </div>
               );
@@ -670,12 +796,12 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
                 <div className="flex items-center text-sm text-gray-600">
                   <span className="w-8">↩</span>
                   <span className="flex-1">Retorno</span>
-                  <span className="flex-1">Volta ao restaurante</span>
+                  <span className="flex-1">{formatDisplayAddress(returnInfo.address)}</span>
                   <span className="w-24 text-right">
                     {returnInfo.distance ? `${(returnInfo.distance / 1000).toFixed(1)} km` : 'N/A'}
                   </span>
                   <span className="w-20 text-right ml-4">
-                    {returnInfo.duration ? `${Math.round(returnInfo.duration / 60)} min` : 'N/A'}
+                    {returnInfo.duration ? `${Math.round(returnInfo.duration)} min` : 'N/A'}
                   </span>
                 </div>
               </>
@@ -693,7 +819,7 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
                       {totalInfo.distance ? `${(totalInfo.distance / 1000).toFixed(1)} km` : 'N/A'}
                     </span>
                     <span className="w-20 text-right ml-4">
-                      {totalInfo.duration ? `${Math.round(totalInfo.duration / 60)} min` : 'N/A'}
+                      {totalInfo.duration ? `${Math.round(totalInfo.duration)} min` : 'N/A'}
                     </span>
                   </div>
                 </div>
