@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import axios from 'axios';
 import polyline from '@mapbox/polyline';
+import { matrixCacheService } from '../services/matrixCacheService';
 
 // Importar ícones do Leaflet
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
@@ -18,15 +19,21 @@ L.Icon.Default.mergeOptions({
   shadowUrl,
 });
 
+interface DeliveryPoint {
+  id: string;
+  customerName: string;
+  street: string;
+  number: string;
+  neighborhood: string;
+  city?: string;
+  state?: string;
+  coordinates?: { lat: number; lng: number };
+  address?: string;
+}
+
 interface DeliveryMapProps {
   restaurantAddress: string;
-  deliveryPoints: Array<{
-    address: string;
-    customerName: string;
-    id: string;
-    lat: number;
-    lng: number;
-  }>;
+  deliveryPoints: DeliveryPoint[];
 }
 
 interface RoutePoint {
@@ -49,15 +56,18 @@ interface DirectionsResult {
 }
 
 export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapProps) {
-  const [origin, setOrigin] = useState<RoutePoint | null>(null);
-  const [destinations, setDestinations] = useState<RoutePoint[]>([]);
-  const [routes, setRoutes] = useState<Array<Array<[number, number]>>>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [routes, setRoutes] = useState<DirectionsResult[]>([]);
+  const [returnRoute, setReturnRoute] = useState<DirectionsResult | null>(null);
   const [routeInfos, setRouteInfos] = useState<RouteInfo[]>([]);
   const [returnInfo, setReturnInfo] = useState<RouteInfo | null>(null);
-  const [totalInfo, setTotalInfo] = useState<{ distance: number; duration: number } | null>(null);
+  const [totalInfo, setTotalInfo] = useState<RouteInfo | null>(null);
+  const [restaurantCoords, setRestaurantCoords] = useState<RoutePoint | null>(null);
+  const [deliveryCoords, setDeliveryCoords] = useState<Array<{point: RoutePoint; id: string}>>([]);
+  const [optimizedOrder, setOptimizedOrder] = useState<string[]>([]);
+  const [coordsLoaded, setCoordsLoaded] = useState(false);
   const [estimatedReturn, setEstimatedReturn] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const markerRefs = useRef<Array<L.Marker>>([]);
 
   const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -73,19 +83,50 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
     console.log('================');
   }, []);
 
-  const geocodeAddress = async (address: string) => {
+  // Função para formatar endereço do restaurante
+  const formatRestaurantAddress = (address: string): string => {
+    return address.replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
+  };
+
+  // Função para formatar endereço de entrega
+  const formatDeliveryAddress = (delivery: DeliveryPoint): string => {
     try {
-      console.log('Geocodificando endereço:', address);
+      if (!delivery) {
+        throw new Error('Dados de entrega ausentes');
+      }
 
-      // Adicionar 'Brasil' ao endereço para melhorar a precisão
-      const fullAddress = `${address}, Brasil`;
+      if (delivery.address) {
+        return delivery.address.replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
+      }
 
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-        fullAddress
-      )}&key=${GOOGLE_MAPS_API_KEY}`;
+      // Remove vírgulas extras e espaços duplicados
+      const street = delivery.street.replace(/,+/g, '').trim();
+      const number = delivery.number.trim();
+      const neighborhood = delivery.neighborhood.trim();
+      const city = (delivery.city || 'Curitiba').replace(/\s*-\s*PR,?\s*PR$/i, ' - PR').trim();
 
-      const response = await axios.get(url);
-      console.log('Resposta da API de Geocodificação:', response.data);
+      // Formata o endereço completo
+      return `${street}, ${number}, ${neighborhood}, ${city}`;
+    } catch (error) {
+      console.error('Erro ao formatar endereço:', error);
+      throw new Error(`Dados de entrega inválidos para ${delivery.customerName}`);
+    }
+  };
+
+  // Função para geocodificar um endereço
+  const geocodeAddress = async (address: string) => {
+    console.log('Geocodificando endereço:', address);
+    try {
+      const response = await axios.get(
+        `https://maps.googleapis.com/maps/api/geocode/json`,
+        {
+          params: {
+            address: address,
+            key: GOOGLE_MAPS_API_KEY,
+            region: 'br'
+          }
+        }
+      );
 
       if (response.data.status === 'ZERO_RESULTS') {
         throw new Error(`Endereço não encontrado: ${address}`);
@@ -107,17 +148,59 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
     }
   };
 
+  // Função para geocodificar todos os endereços
+  const geocodeAllAddresses = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Geocodificar restaurante
+      console.log('Geocodificando restaurante:', restaurantAddress);
+      const restaurantPoint = await geocodeAddress(formatRestaurantAddress(restaurantAddress));
+      setRestaurantCoords(restaurantPoint);
+
+      // Geocodificar pontos de entrega
+      const points = await Promise.all(
+        deliveryPoints.map(async (point) => {
+          const address = formatDeliveryAddress(point);
+          const coords = await geocodeAddress(address);
+          return { point: coords, id: point.id };
+        })
+      );
+      
+      setDeliveryCoords(points);
+      setCoordsLoaded(true);
+    } catch (error) {
+      console.error('Erro ao geocodificar endereços:', error);
+      setError('Erro ao carregar coordenadas dos endereços. Por favor, tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Função para calcular distância entre dois pontos usando a Matrix API
   const getMatrixDistance = async (origin: RoutePoint, destination: RoutePoint): Promise<number> => {
     try {
+      const originStr = `${origin.lat},${origin.lng}`;
+      const destinationStr = `${destination.lat},${destination.lng}`;
+
+      // Tentar buscar do cache primeiro
+      const cachedResult = await matrixCacheService.getCachedDistance(originStr, destinationStr);
+      if (cachedResult) {
+        console.log('Usando distância do cache:', cachedResult);
+        return cachedResult.field_3040303;
+      }
+
       console.log('Chamando Matrix API com:', {
-        origin: `${origin.lat},${origin.lng}`,
-        destinations: `${destination.lat},${destination.lng}`
+        origin: originStr,
+        destinations: destinationStr
       });
 
-      const response = await axios.post('/api/distance-matrix', {
-        origin: `${origin.lat},${origin.lng}`,
-        destinations: `${destination.lat},${destination.lng}`,
+      // Configurar URL base do axios
+      const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
+      const response = await axios.post(`${baseURL}/api/distance-matrix`, {
+        origin: originStr,
+        destinations: destinationStr,
         key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
       });
 
@@ -127,7 +210,18 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
         throw new Error(`Erro na API do Google: ${response.data.status}`);
       }
 
-      return response.data.rows[0].elements[0].distance.value;
+      const distance = response.data.rows[0].elements[0].distance.value;
+      const duration = response.data.rows[0].elements[0].duration.value;
+
+      // Salvar no cache
+      await matrixCacheService.cacheDistance(
+        originStr,
+        destinationStr,
+        distance,
+        duration
+      );
+
+      return distance;
     } catch (error) {
       console.error('Erro ao calcular distância:', error);
       throw error;
@@ -136,7 +230,9 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
 
   const getDirections = async (origin: RoutePoint, destination: RoutePoint): Promise<DirectionsResult> => {
     try {
-      const response = await axios.post('/api/directions', {
+      // Configurar URL base do axios
+      const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
+      const response = await axios.post(`${baseURL}/api/directions`, {
         origin: `${origin.lat},${origin.lng}`,
         destination: `${destination.lat},${destination.lng}`,
         key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
@@ -163,174 +259,148 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
     }
   };
 
+  const optimizeDeliveryOrder = async (
+    restaurantPoint: RoutePoint,
+    deliveryPoints: Array<{ point: RoutePoint; id: string }>
+  ): Promise<string[]> => {
+    try {
+      // Primeiro, encontrar o ponto mais distante do restaurante
+      let maxDistance = -1;
+      let farthestPointId = '';
+      
+      for (let i = 0; i < deliveryPoints.length; i++) {
+        if (!deliveryPoints[i].point) continue;
+        const distance = await getMatrixDistance(restaurantPoint, deliveryPoints[i].point);
+        if (distance > maxDistance) {
+          maxDistance = distance;
+          farthestPointId = deliveryPoints[i].id;
+        }
+      }
+
+      // Remover o ponto mais distante da lista
+      const remainingPoints = deliveryPoints.filter(p => p.id !== farthestPointId);
+      
+      // Criar matriz de distâncias para os pontos restantes
+      const distances: { [key: string]: { [key: string]: number } } = {};
+      
+      // Inicializar matriz com restaurante como ponto 'R'
+      distances['R'] = {};
+      for (const point of remainingPoints) {
+        if (!point.point) continue;
+        const distance = await getMatrixDistance(restaurantPoint, point.point);
+        distances['R'][point.id] = distance;
+      }
+
+      // Calcular distâncias entre todos os pontos restantes
+      for (const point1 of remainingPoints) {
+        if (!point1.point) continue;
+        distances[point1.id] = {};
+        for (const point2 of remainingPoints) {
+          if (!point2.point || point1.id === point2.id) continue;
+          const distance = await getMatrixDistance(point1.point, point2.point);
+          distances[point1.id][point2.id] = distance;
+        }
+      }
+
+      // Implementar algoritmo do vizinho mais próximo para os pontos restantes
+      const visited = new Set<string>();
+      const route: string[] = [];
+      let currentPoint = 'R';
+
+      // Ordenar pontos restantes pelo vizinho mais próximo
+      while (route.length < remainingPoints.length) {
+        let minDistance = Infinity;
+        let nextPoint = '';
+
+        for (const point in distances[currentPoint]) {
+          if (!visited.has(point) && distances[currentPoint][point] < minDistance) {
+            minDistance = distances[currentPoint][point];
+            nextPoint = point;
+          }
+        }
+
+        if (nextPoint) {
+          route.push(nextPoint);
+          visited.add(nextPoint);
+          currentPoint = nextPoint;
+        }
+      }
+
+      // Adicionar o ponto mais distante como último
+      route.push(farthestPointId);
+
+      console.log('Rota otimizada:', route);
+      return route;
+    } catch (error) {
+      console.error('Erro ao otimizar ordem das entregas:', error);
+      return deliveryPoints.map(p => p.id);
+    }
+  };
+
+  // Função para calcular e otimizar rotas
   const calculateRoute = async () => {
+    if (!restaurantCoords || deliveryCoords.length === 0) {
+      console.error('Coordenadas não disponíveis');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      const newRoutes: Array<Array<[number, number]>> = [];
-      const newRouteInfos: RouteInfo[] = [];
-      let deliveryDistance = 0;
-      let deliveryDuration = 0;
 
-      // Geocodificar o endereço do restaurante
-      console.log('Geocodificando restaurante:', restaurantAddress);
-      const originPoint = await geocodeAddress(restaurantAddress);
-      if (!originPoint) {
-        throw new Error('Não foi possível encontrar o endereço do restaurante');
-      }
-      setOrigin(originPoint);
+      // Otimizar ordem dos pontos de entrega
+      const order = await optimizeDeliveryOrder(restaurantCoords, deliveryCoords);
+      setOptimizedOrder(order);
+      
+      // Calcular rotas para cada ponto na ordem otimizada
+      const routeResults: DirectionsResult[] = [];
+      const infos: RouteInfo[] = [];
+      
+      let currentPoint = restaurantCoords;
+      let totalDistance = 0;
+      let totalDuration = 0;
+      
+      for (const pointId of order) {
+        const nextPoint = deliveryCoords.find(p => p.id === pointId)?.point;
+        if (!nextPoint) continue;
 
-      // Se não houver pontos de entrega, não precisa calcular rota
-      if (deliveryPoints.length === 0) {
-        setLoading(false);
-        return;
-      }
+        const result = await getDirections(currentPoint, nextPoint);
+        routeResults.push(result);
+        
+        const deliveryPoint = deliveryPoints.find(p => p.id === pointId);
+        if (!deliveryPoint) continue;
 
-      // Geocodificar todos os pontos de entrega
-      console.log('Geocodificando pontos de entrega:', deliveryPoints);
-      const points = await Promise.all(
-        deliveryPoints.map(async (point) => {
-          const location = await geocodeAddress(point.address);
-          if (!location) {
-            throw new Error(`Não foi possível encontrar o endereço: ${point.address}`);
-          }
-          return {
-            point: location,
-            deliveryData: point
-          };
-        })
-      );
-
-      // Se tiver apenas um ponto, calcular rota direta
-      if (points.length === 1) {
-        console.log('Calculando rota para um único ponto');
-        const routeResult = await getDirections(originPoint, points[0].point);
-        newRoutes.push(routeResult.points);
-
-        // Adicionar informações da rota
-        newRouteInfos.push({
-          address: points[0].deliveryData.address,
-          distance: routeResult.distance,
-          duration: routeResult.duration / 60 // converter segundos para minutos
+        infos.push({
+          address: formatDeliveryAddress(deliveryPoint),
+          distance: result.distance,
+          duration: result.duration
         });
-        deliveryDistance += routeResult.distance;
-        deliveryDuration += routeResult.duration / 60;
-      }
-      // Se tiver múltiplos pontos, calcular matriz de distâncias
-      else if (points.length > 1) {
-        console.log('Calculando matriz de distâncias para múltiplos pontos');
         
-        // Criar array com todos os pontos na ordem original
-        const allPoints = [originPoint, ...points.map(p => p.point)];
-        
-        // Calcular todas as distâncias entre os pontos usando a Matrix API
-        const distances = await Promise.all(
-          allPoints.map(async (point1) => {
-            const results = await Promise.all(
-              allPoints.map(async (point2) => {
-                if (point1 === point2) return 0;
-                return await getMatrixDistance(point1, point2);
-              })
-            );
-            return results;
-          })
-        );
-        
-        console.log('Matriz de distâncias calculada:', distances);
-
-        // Encontrar o ponto mais distante do restaurante
-        const restaurantDistances = distances[0].slice(1); // Ignorar a distância do restaurante para ele mesmo
-        const farthestIndex = findFarthestPointIndex(restaurantDistances);
-        console.log('Índice do ponto mais distante:', farthestIndex);
-
-        // Começar com todos os pontos exceto o mais distante
-        const orderedPoints: typeof points = [];
-        const remainingPoints = [...points];
-        const farthestPoint = remainingPoints.splice(farthestIndex, 1)[0];
-
-        // Começar do restaurante
-        let currentPoint = originPoint;
-        let currentPointIndex = 0;
-
-        // Adicionar os pontos na ordem do mais próximo para o mais distante
-        while (remainingPoints.length > 0) {
-          let nearestIndex = 0;
-          let nearestDistance = Infinity;
-
-          for (let i = 0; i < remainingPoints.length; i++) {
-            const point = remainingPoints[i].point;
-            const pointIndex = allPoints.findIndex(p => p === point);
-            const distance = distances[currentPointIndex][pointIndex];
-
-            if (distance < nearestDistance) {
-              nearestDistance = distance;
-              nearestIndex = i;
-            }
-          }
-
-          const nextPoint = remainingPoints.splice(nearestIndex, 1)[0];
-          orderedPoints.push(nextPoint);
-
-          currentPoint = nextPoint.point;
-          currentPointIndex = allPoints.findIndex(p => p === currentPoint);
-        }
-
-        // Adicionar o ponto mais distante por último
-        orderedPoints.push(farthestPoint);
-
-        console.log('Ordem otimizada:',
-          orderedPoints.map(p => ({
-            address: p.deliveryData.address,
-            coords: p.point
-          }))
-        );
-
-        // Calcular rotas na ordem otimizada
-        let previousPoint = originPoint;
-        for (const point of orderedPoints) {
-          const routeResult = await getDirections(previousPoint, point.point);
-          newRoutes.push(routeResult.points);
-
-          // Adicionar informações da rota
-          newRouteInfos.push({
-            address: point.deliveryData.address,
-            distance: routeResult.distance,
-            duration: routeResult.duration / 60
-          });
-          deliveryDistance += routeResult.distance;
-          deliveryDuration += routeResult.duration / 60;
-
-          previousPoint = point.point;
-        }
+        totalDistance += result.distance;
+        totalDuration += result.duration;
+        currentPoint = nextPoint;
       }
 
-      // Calcular rota de retorno ao restaurante (chamada separada)
-      const lastPoint = points[points.length - 1].point;
-      console.log('Calculando rota de retorno ao restaurante');
-      const returnRouteResult = await getDirections(lastPoint, originPoint);
-
-      // Atualizar informações de retorno
+      // Calcular rota de retorno
+      const returnResult = await getDirections(currentPoint, restaurantCoords);
+      
+      setRoutes(routeResults);
+      setReturnRoute(returnResult);
+      setRouteInfos(infos);
       setReturnInfo({
-        address: 'Retorno ao restaurante',
-        distance: returnRouteResult.distance,
-        duration: returnRouteResult.duration / 60
+        address: formatRestaurantAddress(restaurantAddress),
+        distance: returnResult.distance,
+        duration: returnResult.duration
       });
-
-      // Calcular totais (entrega + retorno)
-      const totalDistance = deliveryDistance + returnRouteResult.distance;
-      const totalDuration = deliveryDuration + (returnRouteResult.duration / 60);
-
-      // Atualizar estados
-      setRoutes(newRoutes);
-      setRouteInfos(newRouteInfos);
       setTotalInfo({
-        distance: totalDistance,
-        duration: totalDuration
+        address: 'Total',
+        distance: totalDistance + returnResult.distance,
+        duration: totalDuration + returnResult.duration
       });
 
       // Calcular horário de retorno
       const now = new Date();
-      const returnTime = new Date(now.getTime() + (totalDuration * 60 * 1000));
+      const returnTime = new Date(now.getTime() + (totalDuration + returnResult.duration));
       setEstimatedReturn(
         returnTime.toLocaleTimeString('pt-BR', {
           hour: '2-digit',
@@ -339,91 +409,25 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
         })
       );
 
-      console.log('Rotas calculadas:', {
-        deliveryRoutes: newRoutes,
-        returnRoute: returnRouteResult,
-        routeInfos: newRouteInfos,
-        returnInfo: {
-          distance: returnRouteResult.distance,
-          duration: returnRouteResult.duration / 60
-        },
-        totalInfo: {
-          distance: totalDistance,
-          duration: totalDuration
-        },
-        estimatedReturn: returnTime.toLocaleTimeString()
-      });
-
     } catch (error) {
-      console.error('Erro ao calcular rota:', error);
-      setError('Erro ao calcular rota. Por favor, tente novamente.');
+      console.error('Erro ao calcular rotas:', error);
+      setError('Erro ao calcular rotas. Por favor, tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para calcular a distância de uma rota em metros
-  const calculateDistance = (route: Array<[number, number]>): number => {
-    let distance = 0;
-    for (let i = 1; i < route.length; i++) {
-      const point1 = route[i - 1];
-      const point2 = route[i];
-      distance += getDistanceFromLatLonInMeters(point1[0], point1[1], point2[0], point2[1]);
-    }
-    return distance;
-  };
-
-  // Função para calcular distância entre dois pontos em metros
-  const getDistanceFromLatLonInMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371e3; // Raio da Terra em metros
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) *
-      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
-  };
-
-  const findFarthestPointIndex = (distances: number[]) => {
-    let maxDistance = -1;
-    let farthestIndex = 0;
-
-    distances.forEach((distance, index) => {
-      if (distance > maxDistance) {
-        maxDistance = distance;
-        farthestIndex = index;
-      }
-    });
-
-    return farthestIndex;
-  };
-
-  const formatDuration = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
-    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-  };
-
-  const formatDistance = (meters: number): string => {
-    return `${(meters / 1000).toFixed(1)} Km`;
-  };
-
-  const calculateReturnTime = (totalMinutes: number): string => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + totalMinutes);
-    return now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  };
-
   useEffect(() => {
     if (restaurantAddress && deliveryPoints.length > 0) {
-      calculateRoute();
+      geocodeAllAddresses();
     }
   }, [restaurantAddress, deliveryPoints]);
+
+  useEffect(() => {
+    if (coordsLoaded && restaurantCoords && deliveryCoords.length > 0) {
+      calculateRoute();
+    }
+  }, [coordsLoaded, restaurantCoords, deliveryCoords]);
 
   useEffect(() => {
     // Abre todos os popups após um pequeno delay para garantir que o mapa foi carregado
@@ -436,7 +440,7 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [origin, destinations]);
+  }, [restaurantCoords, deliveryCoords]);
 
   if (loading) {
     return <div>Carregando mapa...</div>;
@@ -446,17 +450,15 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
     return <div className="text-red-500">{error}</div>;
   }
 
-  if (!origin) {
+  if (!restaurantCoords) {
     return <div>Aguardando dados do mapa...</div>;
   }
-
-  const defaultCenter: [number, number] = [-25.4279409, -49.2745278]; // Curitiba
 
   return (
     <div className="flex flex-col gap-4">
       <div className="relative">
         <MapContainer
-          center={defaultCenter}
+          center={[restaurantCoords.lat, restaurantCoords.lng]}
           zoom={13}
           style={{ height: "400px", width: "100%" }}
         >
@@ -466,9 +468,9 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
           />
 
           {/* Marcador do restaurante */}
-          {origin && (
+          {restaurantCoords && (
             <Marker
-              position={[origin.lat, origin.lng]}
+              position={[restaurantCoords.lat, restaurantCoords.lng]}
               ref={ref => {
                 if (ref) {
                   markerRefs.current[0] = ref;
@@ -483,49 +485,60 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
           )}
 
           {/* Marcadores dos pontos de entrega */}
-          {routeInfos.map((routeInfo, index) => {
-            if (routes[index] && routes[index].length > 0) {
-              const lastPoint = routes[index][routes[index].length - 1];
-              return (
-                <Marker
-                  key={`delivery-${index}`}
-                  position={[lastPoint[0], lastPoint[1]]}
-                  ref={ref => {
-                    if (ref) {
-                      markerRefs.current[index + 1] = ref;
-                    }
-                  }}
-                >
-                  <Popup>
-                    <div className="font-semibold text-lg text-green-700 mb-1">
-                      Entrega {index + 1}
-                    </div>
-                    <div className="text-gray-700 font-medium mb-1">
-                      {deliveryPoints[index].customerName}
-                    </div>
-                    <div className="text-gray-600 text-sm">
-                      {routeInfo.address}
-                    </div>
-                    <div className="text-gray-500 text-xs mt-2">
-                      {(routeInfo.distance / 1000).toFixed(1)} km • {Math.round(routeInfo.duration)} min
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            }
-            return null;
+          {optimizedOrder.map((pointId, index) => {
+            const coords = deliveryCoords.find(p => p.id === pointId)?.point;
+            const deliveryPoint = deliveryPoints.find(p => p.id === pointId);
+            
+            if (!coords || !deliveryPoint) return null;
+
+            return (
+              <Marker
+                key={`delivery-${pointId}`}
+                position={[coords.lat, coords.lng]}
+                ref={ref => {
+                  if (ref) {
+                    markerRefs.current[index + 1] = ref;
+                  }
+                }}
+              >
+                <Popup>
+                  <div className="font-semibold text-lg text-green-700 mb-1">
+                    Entrega {index + 1}
+                  </div>
+                  <div className="text-gray-700 font-medium mb-1">
+                    {deliveryPoint.customerName}
+                  </div>
+                  <div className="text-gray-600 text-sm">
+                    {formatDeliveryAddress(deliveryPoint)}
+                  </div>
+                  <div className="text-gray-500 text-xs mt-2">
+                    {(routeInfos[index].distance / 1000).toFixed(1)} km • {Math.round(routeInfos[index].duration)} min
+                  </div>
+                </Popup>
+              </Marker>
+            );
           })}
 
           {/* Linhas da rota */}
           {routes.map((route, index) => (
             <Polyline
               key={index}
-              positions={route}
+              positions={route.points}
               color="#2563eb"
               weight={4}
               opacity={0.7}
             />
           ))}
+
+          {/* Linha de retorno */}
+          {returnRoute && (
+            <Polyline
+              positions={returnRoute.points}
+              color="#dc2626"
+              weight={4}
+              opacity={0.7}
+            />
+          )}
         </MapContainer>
 
         {/* Loading overlay */}
@@ -548,71 +561,73 @@ export function DeliveryMap({ restaurantAddress, deliveryPoints }: DeliveryMapPr
         <div className="mt-4 p-6 bg-white rounded-lg shadow">
           <h3 className="text-xl font-semibold mb-4">Rota otimizada</h3>
 
-          <div className="space-y-3 font-mono">
+          <div className="space-y-3">
             {/* Cabeçalho */}
             <div className="flex text-gray-600 text-sm border-b pb-2">
+              <span className="w-8">#</span>
+              <span className="flex-1">Cliente</span>
               <span className="flex-1">Endereço</span>
               <span className="w-24 text-right">Distância</span>
               <span className="w-20 text-right ml-4">Tempo</span>
             </div>
 
             {/* Pontos de entrega */}
-            {routeInfos.map((info, index) => (
-              <div key={index} className="flex items-center">
-                <span className="flex-1">
-                  {index + 1}. {info.address}
-                </span>
-                <span className="w-24 text-right">
-                  {formatDistance(info.distance)}
-                </span>
-                <span className="w-20 text-right ml-4">
-                  {formatDuration(info.duration)}
-                </span>
-              </div>
-            ))}
+            {optimizedOrder.map((pointId, index) => {
+              const info = routeInfos[index];
+              const deliveryPoint = deliveryPoints.find(p => p.id === pointId);
+              
+              if (!info || !deliveryPoint) return null;
+
+              return (
+                <div key={pointId} className="flex items-center text-sm">
+                  <span className="w-8">{index + 1}</span>
+                  <span className="flex-1">{deliveryPoint.customerName}</span>
+                  <span className="flex-1">{info.address}</span>
+                  <span className="w-24 text-right">
+                    {info.distance ? `${(info.distance / 1000).toFixed(1)} km` : 'N/A'}
+                  </span>
+                  <span className="w-20 text-right ml-4">
+                    {info.duration ? `${Math.round(info.duration / 60)} min` : 'N/A'}
+                  </span>
+                </div>
+              );
+            })}
 
             {/* Retorno */}
             {returnInfo && (
-              <div className="flex items-center text-gray-600">
-                <span className="flex-1 pl-4">Retorno</span>
-                <span className="w-24 text-right">
-                  {formatDistance(returnInfo.distance)}
-                </span>
-                <span className="w-20 text-right ml-4">
-                  {formatDuration(returnInfo.duration)}
-                </span>
-              </div>
+              <>
+                <div className="border-t border-gray-200 my-2"></div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-8">↩</span>
+                  <span className="flex-1">Retorno</span>
+                  <span className="flex-1">Volta ao restaurante</span>
+                  <span className="w-24 text-right">
+                    {returnInfo.distance ? `${(returnInfo.distance / 1000).toFixed(1)} km` : 'N/A'}
+                  </span>
+                  <span className="w-20 text-right ml-4">
+                    {returnInfo.duration ? `${Math.round(returnInfo.duration / 60)} min` : 'N/A'}
+                  </span>
+                </div>
+              </>
             )}
-
-            {/* Linha divisória */}
-            <div className="border-t border-gray-300 my-2">
-              <div className="flex justify-between text-xs text-gray-400 px-12">
-                <span>-</span>
-                <span>-</span>
-                <span>-</span>
-                <span>-</span>
-                <span>-</span>
-              </div>
-            </div>
 
             {/* Total */}
             {totalInfo && (
-              <div className="flex items-center font-semibold">
-                <span className="flex-1">Total:</span>
-                <span className="w-24 text-right">
-                  {formatDistance(totalInfo.distance)}
-                </span>
-                <span className="w-20 text-right ml-4">
-                  {formatDuration(totalInfo.duration)}
-                </span>
-              </div>
-            )}
-
-            {/* Horário de retorno */}
-            {estimatedReturn && (
-              <div className="mt-4 text-right text-gray-600">
-                Retorno previsto: <span className="font-semibold">{estimatedReturn}</span>
-              </div>
+              <>
+                <div className="border-t border-gray-300 mt-2 pt-2">
+                  <div className="flex items-center text-sm font-semibold">
+                    <span className="w-8">Σ</span>
+                    <span className="flex-1">Total</span>
+                    <span className="flex-1"></span>
+                    <span className="w-24 text-right">
+                      {totalInfo.distance ? `${(totalInfo.distance / 1000).toFixed(1)} km` : 'N/A'}
+                    </span>
+                    <span className="w-20 text-right ml-4">
+                      {totalInfo.duration ? `${Math.round(totalInfo.duration / 60)} min` : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
