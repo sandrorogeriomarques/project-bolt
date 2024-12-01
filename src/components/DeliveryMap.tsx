@@ -315,17 +315,21 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         // Tentar buscar do cache primeiro
         const cachedResult = await matrixCacheService.getCachedDistance(originStr, destinationStr);
         if (cachedResult) {
-          console.log('Usando distância do cache:', cachedResult);
-          return cachedResult.field_3040303;
+          console.log('✅ Usando distância do cache:', cachedResult);
+          return cachedResult.field_3050916;
         }
 
         // Configurar URL base do axios
         const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
+        console.log('🔄 Buscando distância da API...', { origin: originStr, destination: destinationStr });
+        
         const response = await axios.post(`${baseURL}/api/distance-matrix`, {
           origin: originStr,
           destinations: destinationStr,
           key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
         });
+
+        console.log('Resposta da API:', response.data);
 
         if (!response.data || response.data.status !== 'OK') {
           throw new Error(`Erro na API do Google: ${response.data?.status || 'Resposta inválida'}`);
@@ -336,23 +340,16 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
           throw new Error(`Elemento da matriz inválido: ${element?.status || 'Não encontrado'}`);
         }
 
-        const distance = element.distance.value;
-        const duration = element.duration.value;
-
-        // Salvar no cache
-        await matrixCacheService.cacheDistance(
-          originStr,
-          destinationStr,
-          distance,
-          duration
-        );
-
-        return distance;
+        return element.distance.value;
       } catch (error) {
         console.error(`Tentativa ${attempt} falhou:`, error);
         
         if (attempt === retryCount) {
-          throw new Error(`Falha ao calcular distância após ${retryCount} tentativas: ${error.message}`);
+          if (error.response?.data?.error) {
+            throw new Error(`Falha ao calcular distância: ${error.response.data.error}`);
+          } else {
+            throw new Error(`Falha ao calcular distância após ${retryCount} tentativas: ${error.message}`);
+          }
         }
         
         // Esperar antes de tentar novamente

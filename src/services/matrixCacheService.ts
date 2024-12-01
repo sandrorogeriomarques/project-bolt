@@ -11,11 +11,17 @@ const memoryCache: Map<string, {
 
 interface MatrixCacheEntry {
   id?: number;
-  field_3040301: string; // origin
-  field_3040302: string; // destination
-  field_3040303: number; // distance
-  field_3040304: number; // duration
-  field_3040305: number; // timestamp
+  field_3050901: string;  // origin_address
+  field_3050902: number;  // origin_lat
+  field_3050910: number;  // origin_lng
+  field_3050911: string;  // destination_address
+  field_3050913: number;  // destination_lat
+  field_3050915: number;  // destination_lng
+  field_3050916: number;  // distance
+  field_3050918: number;  // duration
+  field_3050919: string;  // points
+  field_3050920?: string; // created_at
+  field_3050921?: string; // last_used
 }
 
 const getCacheKey = (origin: string, destination: string): string => {
@@ -47,9 +53,14 @@ export const matrixCacheService = {
       }
 
       // Se não estiver em memória, buscar do Baserow
+      const [originLat, originLng] = origin.split(',').map(Number);
+      const [destLat, destLng] = destination.split(',').map(Number);
+
       const params = new URLSearchParams({
-        'filter__field_3040301__equal': origin,
-        'filter__field_3040302__equal': destination
+        'filter__field_3050902__equal': originLat.toString(),
+        'filter__field_3050910__equal': originLng.toString(),
+        'filter__field_3050913__equal': destLat.toString(),
+        'filter__field_3050915__equal': destLng.toString()
       });
 
       const response = await baserowApi.get(
@@ -58,7 +69,8 @@ export const matrixCacheService = {
 
       if (response.data.count > 0) {
         const entry = response.data.results[0];
-        const cacheAge = Date.now() - entry.field_3040305;
+        const lastUsed = new Date(entry.field_3050921);
+        const cacheAge = Date.now() - lastUsed.getTime();
         
         if (cacheAge < CACHE_DURATION) {
           // Atualizar cache em memória
@@ -79,7 +91,7 @@ export const matrixCacheService = {
     }
   },
 
-  async cacheDistance(origin: string, destination: string, distance: number, duration: number): Promise<void> {
+  async cacheDistance(origin: string, destination: string, distance: number, duration: number, points: string = ''): Promise<void> {
     try {
       // Validar coordenadas
       if (!isValidCoordinate(origin) || !isValidCoordinate(destination)) {
@@ -87,12 +99,22 @@ export const matrixCacheService = {
         return;
       }
 
+      const [originLat, originLng] = origin.split(',').map(Number);
+      const [destLat, destLng] = destination.split(',').map(Number);
+
+      const now = new Date().toISOString();
       const entry: MatrixCacheEntry = {
-        field_3040301: origin,
-        field_3040302: destination,
-        field_3040303: distance,
-        field_3040304: duration,
-        field_3040305: Date.now()
+        field_3050901: origin,  // origin_address (usando a string completa de coordenadas como endereço por enquanto)
+        field_3050902: originLat,
+        field_3050910: originLng,
+        field_3050911: destination,  // destination_address (usando a string completa de coordenadas como endereço por enquanto)
+        field_3050913: destLat,
+        field_3050915: destLng,
+        field_3050916: distance,
+        field_3050918: duration,
+        field_3050919: points,
+        field_3050920: now,  // created_at
+        field_3050921: now   // last_used
       };
 
       // Atualizar cache em memória primeiro
