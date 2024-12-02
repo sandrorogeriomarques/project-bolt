@@ -54,6 +54,7 @@ export function Register() {
         {
           field_3040201: formData.name, // Nome
           field_3016951: formData.whatsapp, // WhatsApp
+          field_3016952: 'user', // Role - default como 'user'
         },
         {
           headers: {

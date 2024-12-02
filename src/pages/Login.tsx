@@ -48,7 +48,8 @@ export function Login() {
           id: user.id,
           name: user.field_3040201,
           whatsapp: user.field_3016951,
-          avatar: user.field_3016950 || ''
+          avatar: user.field_3016950 || '',
+          role: user.field_3016952 || 'user' // Se não tiver role, assume 'user'
         };
 
         console.log('Usuário mapeado:', mappedUser);
