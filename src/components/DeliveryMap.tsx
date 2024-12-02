@@ -623,6 +623,26 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
     className: 'restaurant-marker', // Classe CSS para colorir o ícone
   });
 
+  // Função para formatar minutos em formato de tempo
+  const formatDuration = (seconds: number): string => {
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) {
+      return `${minutes} min`;
+    }
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h${remainingMinutes > 0 ? ` ${remainingMinutes}min` : ''}`;
+  };
+
+  // Função para calcular horário de retorno
+  const calculateReturnTime = (durationInSeconds: number): string => {
+    const now = new Date();
+    const returnTime = new Date(now.getTime() + durationInSeconds * 1000); // convertendo segundos para milissegundos
+    const hours = returnTime.getHours();
+    const minutes = returnTime.getMinutes();
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
   if (loading) {
     return <div>Carregando mapa...</div>;
   }
@@ -705,7 +725,7 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
                     {formatDisplayAddress(routeInfo.address)}
                   </div>
                   <div className="text-gray-500 text-xs mt-2">
-                    {(routeInfo.distance / 1000).toFixed(1)} km • {Math.round(routeInfo.duration)} min
+                    {(routeInfo.distance / 1000).toFixed(1)} km • {formatDuration(routeInfo.duration)}
                   </div>
                 </Popup>
               </Marker>
@@ -780,7 +800,7 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
                     {info.distance ? `${(info.distance / 1000).toFixed(1)} km` : 'N/A'}
                   </span>
                   <span className="w-20 text-right ml-4">
-                    {info.duration ? `${Math.round(info.duration)} min` : 'N/A'}
+                    {info.duration ? formatDuration(info.duration) : 'N/A'}
                   </span>
                 </div>
               );
@@ -792,13 +812,13 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
                 <div className="border-t border-gray-200 my-2"></div>
                 <div className="flex items-center text-sm text-gray-600">
                   <span className="w-8">↩</span>
-                  <span className="flex-1">Retorno</span>
+                  <span className="flex-1">Retorno ({totalInfo && calculateReturnTime(totalInfo.duration)})</span>
                   <span className="flex-1">{formatDisplayAddress(returnInfo.address)}</span>
                   <span className="w-24 text-right">
                     {returnInfo.distance ? `${(returnInfo.distance / 1000).toFixed(1)} km` : 'N/A'}
                   </span>
                   <span className="w-20 text-right ml-4">
-                    {returnInfo.duration ? `${Math.round(returnInfo.duration)} min` : 'N/A'}
+                    {returnInfo.duration ? formatDuration(returnInfo.duration) : 'N/A'}
                   </span>
                 </div>
               </>
@@ -811,12 +831,12 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
                   <div className="flex items-center text-sm font-semibold">
                     <span className="w-8">Σ</span>
                     <span className="flex-1">Total</span>
-                    <span className="flex-1"></span>
+                    <span className="flex-1">Previsão de retorno: {calculateReturnTime(totalInfo.duration)}</span>
                     <span className="w-24 text-right">
                       {totalInfo.distance ? `${(totalInfo.distance / 1000).toFixed(1)} km` : 'N/A'}
                     </span>
                     <span className="w-20 text-right ml-4">
-                      {totalInfo.duration ? `${Math.round(totalInfo.duration)} min` : 'N/A'}
+                      {totalInfo.duration ? formatDuration(totalInfo.duration) : 'N/A'}
                     </span>
                   </div>
                 </div>
