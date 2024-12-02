@@ -10,7 +10,7 @@ import { Restaurant } from '../types';
 import { getUserPreferences, createUserPreferences, updateUserPreferences } from '../services/userPreferencesService';
 
 export function Settings() {
-  const { user, updateUser } = useUserStore();
+  const { user, updateUser, setUser } = useUserStore();
   const [name, setName] = useState(user?.name || '');
   const [isLoading, setIsLoading] = useState(false);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -115,21 +115,41 @@ export function Settings() {
       
       console.warn('AVATAR PATH RECEIVED:', avatarPath);
       
-      // Garantir que o caminho do avatar esteja correto
-      const normalizedAvatarPath = avatarPath.startsWith('/') ? avatarPath : `/${avatarPath}`;
+      // Extrair apenas o nome do arquivo do caminho completo
+      const filename = avatarPath.split('\\').pop()?.split('/').pop() || '';
       
-      // Atualiza o usuário no Baserow com o caminho do avatar
-      await updateUser({ 
-        avatar: normalizedAvatarPath,
-        // Remover a / inicial para o Baserow
-        field_3040202: normalizedAvatarPath.replace(/^\/+/, '')
+      // Adiciona o prefixo /uploads/ ao salvar
+      const avatarField = `/uploads/${filename}`;
+      
+      console.warn('PROCESSING PATH:', {
+        originalPath: avatarPath,
+        filename: filename,
+        avatarField: avatarField
       });
+      
+      // Atualiza o usuário no Baserow e localmente
+      await updateUser({ 
+        avatar: avatarField,
+        field_3016950: avatarField
+      });
+
+      // Atualiza o estado local do usuário
+      if (user) {
+        setUser({
+          ...user,
+          avatar: avatarField
+        });
+      }
       
       console.warn('USER UPDATE COMPLETED:', {
-        userId: user.id,
-        newAvatarPath: normalizedAvatarPath,
-        baserowPath: normalizedAvatarPath.replace(/^\/+/, '')
+        userId: user?.id,
+        avatarField: avatarField,
+        fullUrl: `${config.apiUrl}/api${avatarField}`
       });
+      
+      // Força um recarregamento da imagem
+      const img = new Image();
+      img.src = `${config.apiUrl}/api${avatarField}?t=${Date.now()}`;
       
       toast.success('Avatar atualizado com sucesso!');
     } catch (error) {

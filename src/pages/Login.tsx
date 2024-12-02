@@ -50,13 +50,14 @@ export function Login() {
           id: user.id,
           name: user.field_3016949,
           whatsapp: user.field_3016951,
-          avatar: user.field_3016950 || '',
+          avatar: user.field_3016950 || '', // Agora field_3016950 é o caminho completo com /uploads/
           role: user.field_3058061?.id === 2286924 ? 'admin' : 'user'
         };
 
-        console.log('Usuário mapeado com role:', {
+        console.log('Usuário mapeado:', {
           rawUser: user,
           mappedUser,
+          avatarField: user.field_3016950,
           roleFromBaserow: user.field_3058061,
           isAdmin: user.field_3058061?.id === 2286924
         });
