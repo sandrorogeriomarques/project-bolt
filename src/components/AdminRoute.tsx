@@ -1,18 +1,23 @@
 import { Navigate } from 'react-router-dom';
 import { useUserStore } from '../stores/userStore';
 
-export function AdminRoute({ children }: { children: React.ReactNode }) {
-  const user = useUserStore((state) => state.user);
-  const isAuthenticated = useUserStore((state) => state.isAuthenticated);
+interface AdminRouteProps {
+  children: React.ReactNode;
+}
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
+  const { user } = useUserStore();
+
+  // Verificar se o usuário está autenticado e é admin
+  if (!user) {
+    console.log('Usuário não autenticado, redirecionando para login');
+    return <Navigate to="/login" />;
   }
 
-  if (user?.role !== 'admin') {
-    // Se não for admin, redireciona para a home
-    return <Navigate to="/" replace />;
+  if (user.role !== 'admin') {
+    console.log('Usuário não é admin, redirecionando para home');
+    return <Navigate to="/" />;
   }
 
   return <>{children}</>;
-}
+};

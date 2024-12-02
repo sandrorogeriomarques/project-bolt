@@ -23,14 +23,15 @@ export function Login() {
     try {
       console.log('Tentando login com WhatsApp:', whatsapp);
 
-      // Buscar usuário no Baserow pelo WhatsApp
+      // Buscar usuário no Baserow
       const response = await axios.get(
-        `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`, {
+        `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`,
+        {
           headers: {
-            'Authorization': `Token ${BASEROW_TOKEN}`,
+            'Authorization': `Token ${BASEROW_TOKEN}`
           },
           params: {
-            'filter__field_3016951__equal': whatsapp,
+            'filter__field_3016951__equal': whatsapp
           }
         }
       );
@@ -41,7 +42,8 @@ export function Login() {
       
       if (users && users.length > 0) {
         const user = users[0];
-        console.log('Usuário encontrado:', user);
+        console.log('Usuário encontrado (dados brutos do Baserow):', user);
+        console.log('Role do Baserow:', user.field_3058061);
 
         // Mapear os campos do Baserow para o formato da aplicação
         const mappedUser = {
@@ -49,41 +51,39 @@ export function Login() {
           name: user.field_3016949,
           whatsapp: user.field_3016951,
           avatar: user.field_3016950 || '',
-          role: user.field_3058061 === 2286924 ? 'admin' : 'user' // 2286924 = admin, outros = user
+          role: user.field_3058061?.id === 2286924 ? 'admin' : 'user'
         };
 
-        console.log('Usuário mapeado:', mappedUser);
+        console.log('Usuário mapeado com role:', {
+          rawUser: user,
+          mappedUser,
+          roleFromBaserow: user.field_3058061,
+          isAdmin: user.field_3058061?.id === 2286924
+        });
+
+        // Salvar usuário temporário para verificação
+        setTempUser(mappedUser);
 
         // Gerar código de verificação
         const verificationCode = whatsappService.generateVerificationCode();
         console.log('Código gerado:', verificationCode);
 
         // Enviar código por WhatsApp
-        const sent = await whatsappService.sendVerificationCode(
-          whatsapp,
-          verificationCode
-        );
+        await whatsappService.sendVerificationCode(whatsapp, verificationCode);
 
-        if (sent) {
-          // Salvar dados temporários
-          setTempUser({
-            ...mappedUser,
-            verificationCode
-          });
+        // Salvar código para verificação
+        localStorage.setItem('verificationCode', verificationCode);
+        localStorage.setItem('verificationExpiry', (Date.now() + 5 * 60 * 1000).toString());
 
-          // Redirecionar para página de verificação
-          console.log('Redirecionando para verificação...');
-          navigate('/verify-code');
-        } else {
-          toast.error('Erro ao enviar código de verificação');
-        }
+        console.log('Redirecionando para verificação...');
+        navigate('/verify-code');
       } else {
-        console.log('Nenhum usuário encontrado com este WhatsApp');
         toast.error('Usuário não encontrado');
+        navigate('/register');
       }
     } catch (error) {
-      console.error('Erro detalhado no login:', error);
-      toast.error('Erro ao processar login');
+      console.error('Erro ao fazer login:', error);
+      toast.error('Erro ao fazer login. Tente novamente.');
     } finally {
       setLoading(false);
     }

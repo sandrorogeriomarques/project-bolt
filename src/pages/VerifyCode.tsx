@@ -1,180 +1,127 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
 import { useUserStore } from '../stores/userStore';
-import axios from 'axios';
-import { TempUser } from '../types';
-
-const BASEROW_TOKEN = import.meta.env.VITE_BASEROW_TOKEN;
-const TABLE_ID = import.meta.env.VITE_BASEROW_TABLE_ID;
-
-if (!BASEROW_TOKEN || !TABLE_ID) {
-  throw new Error('Variáveis de ambiente VITE_BASEROW_TOKEN e VITE_BASEROW_TABLE_ID são obrigatórias');
-}
+import toast from 'react-hot-toast';
 
 export function VerifyCode() {
   const navigate = useNavigate();
-  const tempUser = useUserStore(state => state.tempUser) as TempUser;
-  const setUser = useUserStore(state => state.setUser);
+  const { tempUser, setUser } = useUserStore();
   
   const [code, setCode] = useState(['', '', '', '']);
   const refs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    // Se não houver dados temporários, redirecionar para registro
+    // Se não houver dados temporários, redirecionar para login
     if (!tempUser) {
-      navigate('/register');
-      return;
+      console.log('Sem dados temporários, redirecionando para login');
+      navigate('/login');
     }
-
-    // Focar no primeiro input
-    refs[0].current?.focus();
-  }, []);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (e.key === 'Backspace' && !code[index] && index > 0) {
-      refs[index - 1].current?.focus();
-    }
-  };
+  }, [tempUser, navigate]);
 
   const handleChange = (value: string, index: number) => {
-    if (value.length > 1) return;
+    if (value.length <= 1) {
+      const newCode = [...code];
+      newCode[index] = value;
+      setCode(newCode);
 
-    const newCode = [...code];
-    newCode[index] = value;
-    setCode(newCode);
-
-    if (value && index < 3) {
-      refs[index + 1].current?.focus();
-    }
-
-    // Se todos os dígitos foram preenchidos
-    if (index === 3 && value) {
-      const enteredCode = newCode.join('');
-      verifyCode(enteredCode);
+      // Se digitou um número e não é o último campo, move para o próximo
+      if (value.length === 1 && index < 3) {
+        refs[index + 1]?.current?.focus();
+      }
     }
   };
 
-  const verifyCode = async (enteredCode: string) => {
-    if (!tempUser) {
-      toast.error('Dados de registro não encontrados');
-      navigate('/register');
-      return;
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    // Se pressionar backspace em um campo vazio, volta para o anterior
+    if (e.key === 'Backspace' && !code[index] && index > 0) {
+      refs[index - 1]?.current?.focus();
     }
+  };
 
-    if (!tempUser.verificationCode) {
-      toast.error('Código de verificação não encontrado');
-      navigate('/register');
-      return;
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
 
-    if (enteredCode === tempUser.verificationCode) {
-      try {
-        // Se tiver nome, é registro. Se não tiver, é login
-        if (tempUser.name) {
-          // Criar usuário no Baserow
-          const response = await axios.post(
-            `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`,
-            {
-              "field_3016949": tempUser.name,
-              "field_3016951": tempUser.whatsapp
-            },
-            {
-              headers: {
-                'Authorization': `Token ${BASEROW_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
+    try {
+      const storedCode = localStorage.getItem('verificationCode');
+      const expiryTime = Number(localStorage.getItem('verificationExpiry'));
 
-          if (!tempUser.whatsapp) {
-            throw new Error('WhatsApp não encontrado nos dados temporários');
-          }
-
-          // Salvar usuário no estado global
-          setUser({
-            id: response.data.id.toString(),
-            name: tempUser.name,
-            whatsapp: tempUser.whatsapp
-          });
-
-          toast.success('Cadastro realizado com sucesso!');
-        } else {
-          // Buscar usuário existente no Baserow
-          const response = await axios.get(
-            `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`,
-            {
-              headers: {
-                'Authorization': `Token ${BASEROW_TOKEN}`,
-              },
-              params: {
-                'search': tempUser.whatsapp,
-                'user_field_names': true
-              }
-            }
-          );
-
-          const user = response.data.results.find((u: any) => u.WhatsApp === tempUser.whatsapp);
-          
-          if (user) {
-            // Salvar usuário no estado global com o avatar
-            setUser({
-              id: user.id.toString(),
-              name: user.Nome,
-              whatsapp: user.WhatsApp,
-              avatar: user.Avatar
-            });
-
-            toast.success('Login realizado com sucesso!');
-          } else {
-            toast.error('Usuário não encontrado');
-            navigate('/login');
-            return;
-          }
-        }
-
-        navigate('/dashboard');
-      } catch (error) {
-        console.error('Erro ao processar operação:', error);
-        if (axios.isAxiosError(error)) {
-          console.error('Detalhes do erro:', error.response?.data);
-        }
-        toast.error(tempUser.name ? 'Erro ao finalizar cadastro' : 'Erro ao fazer login');
+      if (!storedCode || !expiryTime) {
+        toast.error('Código de verificação expirado');
+        navigate('/login');
+        return;
       }
-    } else {
-      toast.error('Código inválido');
-      // Limpar os campos
-      setCode(['', '', '', '']);
-      refs[0].current?.focus();
+
+      if (Date.now() > expiryTime) {
+        toast.error('Código de verificação expirado');
+        navigate('/login');
+        return;
+      }
+
+      if (code.join('') !== storedCode) {
+        toast.error('Código inválido');
+        return;
+      }
+
+      if (!tempUser) {
+        toast.error('Dados do usuário não encontrados');
+        navigate('/login');
+        return;
+      }
+
+      // Limpar dados temporários
+      localStorage.removeItem('verificationCode');
+      localStorage.removeItem('verificationExpiry');
+
+      // Autenticar usuário
+      setUser(tempUser);
+      toast.success('Login realizado com sucesso!');
+      navigate('/dashboard');
+
+    } catch (error) {
+      console.error('Erro ao verificar código:', error);
+      toast.error('Erro ao verificar código');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Verificação de WhatsApp
+        <div className="text-center">
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+            Verificação
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Digite o código de 4 dígitos enviado para seu WhatsApp
+          <p className="mt-2 text-sm text-gray-600">
+            Digite o código enviado para seu WhatsApp
           </p>
         </div>
 
-        <div className="flex justify-center space-x-4">
-          {code.map((digit, index) => (
-            <input
-              key={index}
-              ref={refs[index]}
-              type="text"
-              maxLength={1}
-              value={digit}
-              onChange={(e) => handleChange(e.target.value, index)}
-              onKeyDown={(e) => handleKeyDown(e, index)}
-              className="w-12 h-12 text-center text-2xl border-2 border-gray-300 rounded-md focus:border-indigo-500 focus:ring-indigo-500"
-            />
-          ))}
-        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="flex justify-center space-x-4">
+            {code.map((digit, index) => (
+              <input
+                key={index}
+                ref={refs[index]}
+                type="text"
+                maxLength={1}
+                value={digit}
+                onChange={(e) => handleChange(e.target.value, index)}
+                onKeyDown={(e) => handleKeyDown(e, index)}
+                className="w-12 h-12 text-center text-2xl border-2 border-gray-300 rounded-md focus:border-indigo-500 focus:ring-indigo-500"
+              />
+            ))}
+          </div>
+          <button
+            type="submit"
+            disabled={isLoading || code.some(digit => !digit)}
+            className="mt-4 w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+          >
+            {isLoading ? 'Verificando...' : 'Verificar'}
+          </button>
+        </form>
       </div>
     </div>
   );

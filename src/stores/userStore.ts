@@ -7,14 +7,14 @@ interface BaserowUpdates {
   field_3016949?: string; // Nome
   field_3016950?: string; // Avatar
   field_3016951?: string; // WhatsApp
-  field_3058061?: number; // Role (2286924 = admin, 2286925 = user)
+  field_3058061?: { id: number }; // Role (2286924 = admin, 2286925 = user)
 }
 
 interface UserState {
   user: User | null;
+  tempUser: User | null;
   isAuthenticated: boolean;
-  tempUser: TempUser | null;
-  setTempUser: (user: TempUser | null) => void;
+  setTempUser: (user: User | null) => void;
   setUser: (user: User | null) => void;
   updateUser: (updates: Partial<User>) => Promise<void>;
   logout: () => void;
@@ -28,10 +28,21 @@ export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
       user: null,
-      isAuthenticated: false,
       tempUser: null,
-      setTempUser: (user) => set({ tempUser: user }),
-      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      isAuthenticated: false,
+      setTempUser: (user) => {
+        console.log('Salvando usuário temporário:', user);
+        set({ tempUser: user });
+      },
+      setUser: (user) => {
+        console.log('Salvando usuário no store:', {
+          user,
+          hasRole: user ? 'role' in user : false,
+          role: user?.role
+        });
+        // Limpar usuário temporário ao autenticar
+        set({ user, isAuthenticated: !!user, tempUser: null });
+      },
       updateUser: async (updates) => {
         const currentUser = get().user;
         if (!currentUser?.id) return;
@@ -56,7 +67,9 @@ export const useUserStore = create<UserState>()(
             baserowUpdates.field_3016951 = updates.whatsapp;
           }
           if (updates.role !== undefined) {
-            baserowUpdates.field_3058061 = updates.role === 'admin' ? 2286924 : 2286925;
+            baserowUpdates.field_3058061 = {
+              id: updates.role === 'admin' ? 2286924 : 2286925
+            };
           }
 
           console.log('Dados formatados para Baserow:', baserowUpdates);
