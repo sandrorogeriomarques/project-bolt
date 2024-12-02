@@ -12,6 +12,7 @@ import RestaurantForm from './pages/admin/RestaurantForm';
 import { useUserStore } from './stores/userStore';
 import { Home } from './pages/Home';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AdminRoute } from './components/AdminRoute';
 
 function App() {
   const user = useUserStore(state => state.user);
@@ -69,36 +70,36 @@ function App() {
             </ProtectedRoute>
           } />
 
-          {/* Rotas de Restaurantes */}
+          {/* Rotas administrativas */}
           <Route path="/admin/restaurants" element={
-            <ProtectedRoute>
+            <AdminRoute>
               <div className="min-h-screen bg-gray-50">
                 <Navigation />
                 <div className="pt-16">
                   <Restaurants />
                 </div>
               </div>
-            </ProtectedRoute>
+            </AdminRoute>
           } />
           <Route path="/admin/restaurants/new" element={
-            <ProtectedRoute>
+            <AdminRoute>
               <div className="min-h-screen bg-gray-50">
                 <Navigation />
                 <div className="pt-16">
                   <RestaurantForm />
                 </div>
               </div>
-            </ProtectedRoute>
+            </AdminRoute>
           } />
-          <Route path="/admin/restaurants/:id/edit" element={
-            <ProtectedRoute>
+          <Route path="/admin/restaurants/:id" element={
+            <AdminRoute>
               <div className="min-h-screen bg-gray-50">
                 <Navigation />
                 <div className="pt-16">
                   <RestaurantForm />
                 </div>
               </div>
-            </ProtectedRoute>
+            </AdminRoute>
           } />
 
           {/* Rota padrão */}

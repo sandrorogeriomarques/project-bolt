@@ -21,12 +21,24 @@ class MatrixCacheService {
         destination: { lat: destination_lat, lng: destination_lng }
       });
 
-      // Buscar rota no cache usando os filtros corretos do Baserow
+      // Buscar rotas próximas usando intervalos
       const params = {
-        filter__origin_lat__equal: origin_lat,
-        filter__origin_lng__equal: origin_lng,
-        filter__destination_lat__equal: destination_lat,
-        filter__destination_lng__equal: destination_lng,
+        filter__origin_lat__range: [
+          (parseFloat(origin_lat) - this.marginOfError).toFixed(6),
+          (parseFloat(origin_lat) + this.marginOfError).toFixed(6)
+        ],
+        filter__origin_lng__range: [
+          (parseFloat(origin_lng) - this.marginOfError).toFixed(6),
+          (parseFloat(origin_lng) + this.marginOfError).toFixed(6)
+        ],
+        filter__destination_lat__range: [
+          (parseFloat(destination_lat) - this.marginOfError).toFixed(6),
+          (parseFloat(destination_lat) + this.marginOfError).toFixed(6)
+        ],
+        filter__destination_lng__range: [
+          (parseFloat(destination_lng) - this.marginOfError).toFixed(6),
+          (parseFloat(destination_lng) + this.marginOfError).toFixed(6)
+        ],
         user_field_names: true
       };
 

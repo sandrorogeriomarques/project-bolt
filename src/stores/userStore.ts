@@ -5,9 +5,10 @@ import axios from 'axios';
 
 interface BaserowUpdates {
   field_3040201?: string; // Nome
-  field_3016950?: string; // Avatar - Campo correto do Baserow
+  field_3016950?: string; // Avatar
   field_3040203?: string; // WhatsApp
   field_3040204?: number; // Restaurant ID
+  field_3016952?: string; // Role
 }
 
 interface UserState {
@@ -44,20 +45,22 @@ export const useUserStore = create<UserState>()(
           });
 
           const baserowUpdates: BaserowUpdates = {};
-          
+
           // Mapear os campos de forma explícita
           if (updates.name !== undefined) {
             baserowUpdates.field_3040201 = updates.name;
           }
           if (updates.avatar !== undefined) {
-            // Remover a barra inicial e atualizar o campo correto
-            baserowUpdates.field_3016950 = updates.avatar.replace(/^\/+/, '');
+            baserowUpdates.field_3016950 = updates.avatar;
           }
           if (updates.whatsapp !== undefined) {
             baserowUpdates.field_3040203 = updates.whatsapp;
           }
           if (updates.restaurantId !== undefined) {
             baserowUpdates.field_3040204 = updates.restaurantId;
+          }
+          if (updates.role !== undefined) {
+            baserowUpdates.field_3016952 = updates.role;
           }
 
           console.log('Dados formatados para Baserow:', baserowUpdates);
@@ -97,7 +100,7 @@ export const useUserStore = create<UserState>()(
           set({ user: updatedUser });
         } catch (error) {
           console.error('Erro detalhado ao atualizar usuário:', error);
-          
+
           if (axios.isAxiosError(error)) {
             console.error('Detalhes do erro do Baserow:', {
               response: error.response?.data,
@@ -114,7 +117,7 @@ export const useUserStore = create<UserState>()(
               }
             });
           }
-          
+
           throw error;
         }
       },

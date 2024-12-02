@@ -21,7 +21,10 @@ export function Navigation() {
   const menuItems = [
     { to: "/dashboard", icon: <Home className="w-5 h-5" />, label: "Home" },
     { to: "/deliveries", icon: <Package className="w-5 h-5" />, label: "Entregas" },
-    { to: "/admin/restaurants", icon: <Store className="w-5 h-5" />, label: "Restaurantes" },
+    // Links administrativos
+    ...(user?.role === 'admin' ? [
+      { to: "/admin/restaurants", icon: <Store className="w-5 h-5" />, label: "Restaurantes" },
+    ] : []),
     { to: "/profile", icon: <User className="w-5 h-5" />, label: "Perfil" },
     { to: "/settings", icon: <Settings className="w-5 h-5" />, label: "Configurações" },
   ];

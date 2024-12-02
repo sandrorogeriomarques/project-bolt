@@ -18,6 +18,7 @@ export interface User {
   whatsapp: string;
   avatar?: string;
   restaurantId?: number;
+  role: 'user' | 'admin';
 }
 
 export interface TempUser {
