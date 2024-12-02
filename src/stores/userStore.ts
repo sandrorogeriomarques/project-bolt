@@ -4,11 +4,10 @@ import { User, TempUser } from '../types';
 import axios from 'axios';
 
 interface BaserowUpdates {
-  field_3040201?: string; // Nome
+  field_3016949?: string; // Nome
   field_3016950?: string; // Avatar
-  field_3040203?: string; // WhatsApp
-  field_3040204?: number; // Restaurant ID
-  field_3016952?: string; // Role
+  field_3016951?: string; // WhatsApp
+  field_3058061?: number; // Role (2286924 = admin, 2286925 = user)
 }
 
 interface UserState {
@@ -48,19 +47,16 @@ export const useUserStore = create<UserState>()(
 
           // Mapear os campos de forma explícita
           if (updates.name !== undefined) {
-            baserowUpdates.field_3040201 = updates.name;
+            baserowUpdates.field_3016949 = updates.name;
           }
           if (updates.avatar !== undefined) {
             baserowUpdates.field_3016950 = updates.avatar;
           }
           if (updates.whatsapp !== undefined) {
-            baserowUpdates.field_3040203 = updates.whatsapp;
-          }
-          if (updates.restaurantId !== undefined) {
-            baserowUpdates.field_3040204 = updates.restaurantId;
+            baserowUpdates.field_3016951 = updates.whatsapp;
           }
           if (updates.role !== undefined) {
-            baserowUpdates.field_3016952 = updates.role;
+            baserowUpdates.field_3058061 = updates.role === 'admin' ? 2286924 : 2286925;
           }
 
           console.log('Dados formatados para Baserow:', baserowUpdates);

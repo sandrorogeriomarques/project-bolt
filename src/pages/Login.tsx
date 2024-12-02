@@ -46,10 +46,10 @@ export function Login() {
         // Mapear os campos do Baserow para o formato da aplicação
         const mappedUser = {
           id: user.id,
-          name: user.field_3040201,
+          name: user.field_3016949,
           whatsapp: user.field_3016951,
           avatar: user.field_3016950 || '',
-          role: user.field_3016952 || 'user' // Se não tiver role, assume 'user'
+          role: user.field_3058061 === 2286924 ? 'admin' : 'user' // 2286924 = admin, outros = user
         };
 
         console.log('Usuário mapeado:', mappedUser);

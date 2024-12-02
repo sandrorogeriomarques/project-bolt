@@ -52,9 +52,9 @@ export function Register() {
       const createResponse = await axios.post(
         `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/`,
         {
-          field_3040201: formData.name, // Nome
+          field_3016949: formData.name, // Nome
           field_3016951: formData.whatsapp, // WhatsApp
-          field_3016952: 'user', // Role - default como 'user'
+          field_3058061: 2286925, // Role - default como 'user' (2286925)
         },
         {
           headers: {
