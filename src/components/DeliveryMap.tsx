@@ -6,8 +6,10 @@ import L from 'leaflet';
 import axios from 'axios';
 import polyline from '@mapbox/polyline';
 import { matrixCacheService } from '../services/matrixCacheService';
+import { directionsService } from '../services/directionsCache';
 import { getRestaurantCoordinates } from '../services/restaurantService';
 import { baserowApi } from '../services/baserowApi';
+import { apiTracker } from '../services/apiTracker';
 
 // Importar ícones do Leaflet
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
@@ -315,8 +317,9 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         // Tentar buscar do cache primeiro
         const cachedResult = await matrixCacheService.getCachedDistance(originStr, destinationStr);
         if (cachedResult) {
+          apiTracker.addMatrixCall(originStr, destinationStr, true);
           console.log('✅ Usando distância do cache:', cachedResult);
-          return cachedResult.field_3050916;
+          return cachedResult.distance;
         }
 
         // Configurar URL base do axios
@@ -326,9 +329,10 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         const response = await axios.post(`${baseURL}/api/distance-matrix`, {
           origin: originStr,
           destinations: destinationStr,
-          key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+          key: GOOGLE_MAPS_API_KEY
         });
 
+        apiTracker.addMatrixCall(originStr, destinationStr, false);
         console.log('Resposta da API:', response.data);
 
         if (!response.data || response.data.status !== 'OK') {
@@ -339,6 +343,14 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         if (!element || element.status !== 'OK') {
           throw new Error(`Elemento da matriz inválido: ${element?.status || 'Não encontrado'}`);
         }
+
+        // Salvar no cache
+        await matrixCacheService.cacheDistance(
+          originStr,
+          destinationStr,
+          element.distance.value,
+          element.duration.value
+        );
 
         return element.distance.value;
       } catch (error) {
@@ -369,12 +381,43 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         const originStr = `${origin.lat},${origin.lng}`;
         const destinationStr = `${destination.lat},${destination.lng}`;
 
-        // Configurar URL base do axios
+        // Tentar buscar do cache primeiro
+        const cachedResult = await directionsService.getFromCache(originStr, destinationStr);
+        if (cachedResult) {
+          apiTracker.addDirectionsCall(originStr, destinationStr, true);
+          // Buscar apenas a duração atualizada da API
+          const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
+          const response = await axios.post(`${baseURL}/api/directions`, {
+            origin: originStr,
+            destination: destinationStr,
+            key: GOOGLE_MAPS_API_KEY
+          });
+
+          if (!response.data || response.data.status !== 'OK') {
+            throw new Error(`Erro na API do Google: ${response.data?.status || 'Resposta inválida'}`);
+          }
+
+          const leg = response.data.routes[0]?.legs[0];
+          if (!leg) {
+            throw new Error('Dados da rota incompletos');
+          }
+
+          // Combinar dados do cache com duração atual
+          return {
+            points: cachedResult.staticData.points,
+            distance: cachedResult.staticData.distance,
+            duration: leg.duration.value,
+            startAddress: cachedResult.staticData.addresses.start,
+            endAddress: cachedResult.staticData.addresses.end
+          };
+        }
+
+        // Se não tem cache, buscar tudo da API
         const baseURL = import.meta.env.DEV ? 'http://localhost:8081' : '';
         const response = await axios.post(`${baseURL}/api/directions`, {
           origin: originStr,
           destination: destinationStr,
-          key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+          key: GOOGLE_MAPS_API_KEY
         });
 
         if (!response.data || response.data.status !== 'OK') {
@@ -391,13 +434,26 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
           throw new Error('Dados da rota incompletos');
         }
 
-        return {
+        const result = {
           points: polyline.decode(route.overview_polyline.points),
           distance: leg.distance.value,
           duration: leg.duration.value,
           startAddress: leg.start_address,
           endAddress: leg.end_address
         };
+
+        // Salvar dados estáticos no cache
+        await directionsService.saveToCache(originStr, destinationStr, {
+          points: result.points,
+          distance: result.distance,
+          addresses: {
+            start: result.startAddress,
+            end: result.endAddress
+          }
+        });
+
+        apiTracker.addDirectionsCall(originStr, destinationStr, false);
+        return result;
       } catch (error) {
         console.error(`Tentativa ${attempt} falhou:`, error);
         
@@ -502,6 +558,9 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
       setLoading(true);
       setError(null);
 
+      // Limpar estatísticas anteriores
+      apiTracker.clearStats();
+
       // Otimizar ordem dos pontos de entrega
       const order = await optimizeDeliveryOrder(restaurantCoords, deliveryCoords);
       setOptimizedOrder(order);
@@ -563,10 +622,13 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         })
       );
 
+      // Exibir resumo de chamadas de API
+      console.log(apiTracker.getSummary());
+      
+      setLoading(false);
     } catch (error) {
       console.error('Erro ao calcular rotas:', error);
       setError('Erro ao calcular rotas. Por favor, tente novamente.');
-    } finally {
       setLoading(false);
     }
   };
