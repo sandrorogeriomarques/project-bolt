@@ -43,3 +43,40 @@ export interface DeliveryData {
 export interface OCRResponse {
   text: string;
 }
+
+export interface SharedDeliveryData {
+  hash: string;
+  restaurantId: string;
+  restaurantAddress: string;
+  deliveryPoints: SharedDeliveryPoint[];
+  receipts: {
+    id: string;
+    image: string;
+  }[];
+  route: {
+    points: Array<{lat: number; lng: number}>;
+    distances: number[];
+    durations: number[];
+    totalDistance: number;
+    totalDuration: number;
+  };
+  createdAt: string;
+  status: 'completed' | 'in_progress';
+}
+
+export interface SharedDeliveryPoint {
+  id: string;
+  customerName: string;
+  address: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+}
+
+export interface DirectionsResult {
+  points: Array<[number, number]>;
+  distance: number;
+  duration: number;
+  startAddress: string;
+  endAddress: string;
+}

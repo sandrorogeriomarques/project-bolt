@@ -12,6 +12,8 @@ import type { DeliveryData, Restaurant } from '../types';
 import { useUserStore } from '../stores/userStore';
 import { useRouteStore } from '../stores/routeStore';
 import { useNavigate } from 'react-router-dom';
+import { createSharedDelivery } from '../services/deliveryService';
+import { toast } from 'react-hot-toast';
 
 export function Deliveries() {
   const user = useUserStore(state => state.user);
@@ -24,6 +26,7 @@ export function Deliveries() {
   const [deliveryData, setDeliveryData] = useState<DeliveryData | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [currentRoutes, setCurrentRoutes] = useState<DirectionsResult[]>([]);
 
   useEffect(() => {
     if (!user) {
@@ -79,9 +82,66 @@ export function Deliveries() {
     setShowMap(false);
   };
 
-  const handleFinishRoute = () => {
-    // TODO: Implementar lógica para finalizar rota
-    console.log('Finalizando rota...');
+  const handleRoutesCalculated = React.useCallback((routes: DirectionsResult[]) => {
+    setCurrentRoutes(routes);
+  }, []);
+
+  const handleFinishRoute = async () => {
+    try {
+      setIsLoading(true);
+
+      if (!currentRoutes.length) {
+        throw new Error('Nenhuma rota calculada');
+      }
+
+      // Coletar dados da rota atual
+      const routeData = {
+        points: currentRoutes.flatMap(r => r.points),
+        distances: currentRoutes.map(r => r.distance),
+        durations: currentRoutes.map(r => r.duration),
+        totalDistance: currentRoutes.reduce((total, r) => total + r.distance, 0),
+        totalDuration: currentRoutes.reduce((total, r) => total + r.duration, 0)
+      };
+
+      const hash = await createSharedDelivery(deliveries, selectedRestaurant, routeData);
+      
+      // Gerar URL de compartilhamento
+      const shareUrl = `${window.location.origin}/delivery/${hash}`;
+
+      // Tentar copiar para o clipboard com fallback
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(shareUrl);
+          toast.success('Link copiado para a área de transferência!');
+        } else {
+          // Fallback para método mais antigo
+          const textArea = document.createElement('textarea');
+          textArea.value = shareUrl;
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          
+          try {
+            document.execCommand('copy');
+            toast.success('Link copiado para a área de transferência!');
+          } catch (err) {
+            // Se falhar, mostrar o link para o usuário copiar manualmente
+            alert(`Por favor, copie o link manualmente:\n${shareUrl}`);
+          }
+          
+          document.body.removeChild(textArea);
+        }
+      } catch (err) {
+        // Se tudo falhar, mostrar o link para o usuário copiar manualmente
+        alert(`Por favor, copie o link manualmente:\n${shareUrl}`);
+      }
+      
+    } catch (error) {
+      console.error('Erro ao finalizar rota:', error);
+      toast.error('Erro ao gerar link de compartilhamento');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const processImage = async (file: File) => {
@@ -301,6 +361,7 @@ export function Deliveries() {
                 state: delivery.state,
                 address: delivery.fullAddress
               }))}
+              onRoutesCalculated={handleRoutesCalculated}
             />
             <div className="mt-6 flex justify-end gap-4">
               <button

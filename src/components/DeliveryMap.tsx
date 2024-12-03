@@ -39,7 +39,14 @@ interface DeliveryPoint {
 interface DeliveryMapProps {
   restaurantId: string;
   restaurantAddress: string;
-  deliveryPoints: DeliveryPoint[];
+  deliveryPoints: SharedDeliveryPoint[];
+  readOnly?: boolean;
+  savedRoute?: {
+    points: Array<[number, number]>;
+    distances: number[];
+    durations: number[];
+  };
+  onRoutesCalculated?: (routes: DirectionsResult[]) => void;
 }
 
 interface RoutePoint {
@@ -78,7 +85,14 @@ function AutoZoom({ points }: { points: Array<[number, number]> }) {
   return null;
 }
 
-export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }: DeliveryMapProps) {
+export function DeliveryMap({ 
+  restaurantId, 
+  restaurantAddress, 
+  deliveryPoints,
+  readOnly,
+  savedRoute,
+  onRoutesCalculated
+}: DeliveryMapProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [routes, setRoutes] = useState<DirectionsResult[]>([]);
@@ -269,12 +283,13 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
       setLoading(true);
       setError(null);
 
+      console.log('Buscando coordenadas do restaurante:', restaurantId);
       // Buscar coordenadas do restaurante do banco
       const restaurantPoint = await getRestaurantCoordinates(restaurantId);
       if (!restaurantPoint) {
+        console.log('Geocodificando endereço do restaurante:', restaurantAddress);
         // Se não houver coordenadas no banco, geocodificar o endereço
-        const formattedAddress = formatRestaurantAddress(restaurantAddress);
-        const coords = await geocodeAddress(formattedAddress);
+        const coords = await geocodeAddress(formatRestaurantAddress(restaurantAddress));
         setRestaurantCoords(coords);
       } else {
         setRestaurantCoords(restaurantPoint);
@@ -283,12 +298,8 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
       // Geocodificar pontos de entrega
       const points = await Promise.all(
         deliveryPoints.map(async (point) => {
-          if (point.coordinates) {
-            // Se já tiver coordenadas, usar diretamente
-            return { point: point.coordinates, id: point.id };
-          }
-          // Se não tiver coordenadas, geocodificar
           const address = formatDeliveryAddress(point);
+          console.log('Geocodificando ponto de entrega:', address);
           const coords = await geocodeAddress(address);
           return { point: coords, id: point.id };
         })
@@ -584,7 +595,7 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
         if (!deliveryPoint) continue;
 
         infos.push({
-          address: result.endAddress, // Usando o endereço formatado da API
+          address: result.endAddress, // Usando o endereo formatado da API
           distance: result.distance,
           duration: result.duration
         });
@@ -598,6 +609,7 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
       const returnResult = await getDirections(currentPoint, restaurantCoords);
       
       setRoutes(routeResults);
+      onRoutesCalculated?.(routeResults);
       setReturnRoute(returnResult);
       setRouteInfos(infos);
       setReturnInfo({
@@ -655,17 +667,39 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
     return allPoints;
   };
 
+  // Geocodificar endereços apenas uma vez
   useEffect(() => {
-    if (restaurantAddress && deliveryPoints.length > 0) {
+    if (restaurantAddress && deliveryPoints.length > 0 && !coordsLoaded) {
       geocodeAllAddresses();
     }
-  }, [restaurantAddress, deliveryPoints]);
+  }, [restaurantAddress, deliveryPoints]); // Remover coordsLoaded da dependência
 
+  // Calcular rota apenas quando coordenadas estiverem prontas
   useEffect(() => {
-    if (coordsLoaded && restaurantCoords && deliveryCoords.length > 0) {
-      calculateRoute();
+    const handleRouteCalculation = async () => {
+      if (readOnly && savedRoute) {
+        const routes = savedRoute.points.map((point, index) => ({
+          points: [point],
+          distance: savedRoute.distances[index],
+          duration: savedRoute.durations[index],
+          startAddress: '',
+          endAddress: ''
+        }));
+        setRoutes(routes);
+      } else if (coordsLoaded && restaurantCoords && deliveryCoords.length > 0) {
+        await calculateRoute();
+      }
+    };
+
+    handleRouteCalculation();
+  }, [coordsLoaded]); // Depender apenas de coordsLoaded
+
+  // Notificar rotas calculadas
+  useEffect(() => {
+    if (routes.length > 0 && onRoutesCalculated) {
+      onRoutesCalculated(routes);
     }
-  }, [coordsLoaded, restaurantCoords, deliveryCoords]);
+  }, [routes, onRoutesCalculated]);
 
   useEffect(() => {
     // Abre todos os popups após um pequeno delay para garantir que o mapa foi carregado
@@ -910,3 +944,24 @@ export function DeliveryMap({ restaurantId, restaurantAddress, deliveryPoints }:
     </div>
   );
 }
+
+export const getAllRoutePoints = (): Array<[number, number]> => {
+  const allPoints: Array<[number, number]> = [];
+  
+  // Adicionar ponto do restaurante
+  if (restaurantCoords) {
+    allPoints.push([restaurantCoords.lat, restaurantCoords.lng]);
+  }
+  
+  // Adicionar pontos das rotas
+  routes.forEach(route => {
+    allPoints.push(...route.points);
+  });
+  
+  // Adicionar pontos da rota de retorno
+  if (returnRoute) {
+    allPoints.push(...returnRoute.points);
+  }
+  
+  return allPoints;
+};
